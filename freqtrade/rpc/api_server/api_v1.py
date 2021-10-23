@@ -11,7 +11,7 @@ from freqtrade.constants import USERPATH_STRATEGIES
 from freqtrade.data.history import get_datahandler
 from freqtrade.exceptions import OperationalException
 from freqtrade.rpc import RPC
-from freqtrade.rpc.api_server.api_schemas import (AvailablePairs, Balances, BlacklistPayload,
+from freqtrade.rpc.api_server.api_schemas import (AddLockRequest, AvailablePairs, Balances, BlacklistPayload,
                                                   BlacklistResponse, Count, Daily,
                                                   DeleteLockRequest, DeleteTrade, ForceBuyPayload,
                                                   ForceBuyResponse, ForceSellPayload, Locks, Logs,
@@ -162,6 +162,10 @@ def delete_lock(lockid: int, rpc: RPC = Depends(get_rpc)):
 @router.post('/locks/delete', response_model=Locks, tags=['info', 'locks'])
 def delete_lock_pair(payload: DeleteLockRequest, rpc: RPC = Depends(get_rpc)):
     return rpc._rpc_delete_lock(lockid=payload.lockid, pair=payload.pair)
+
+@router.post('/addlock', response_model=Locks, tags=['info', 'locks'])
+def add_lock(payload: AddLockRequest, rpc: RPC = Depends(get_rpc)):
+    return rpc._rpc_add_lock(pair=payload.pair, minutes=payload.minutes, reason=payload.reason)       
 
 
 @router.get('/logs', response_model=Logs, tags=['info'])

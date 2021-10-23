@@ -235,6 +235,12 @@ class DeleteLockRequest(BaseModel):
     lockid: Optional[int]
 
 
+class AddLockRequest(BaseModel):
+    pair: str
+    minutes: Optional[float]
+    reason: Optional[str]
+
+
 class Logs(BaseModel):
     log_count: int
     logs: List[List]
@@ -243,7 +249,6 @@ class Logs(BaseModel):
 class ForceBuyPayload(BaseModel):
     pair: str
     price: Optional[float]
-
 
 class ForceSellPayload(BaseModel):
     tradeid: str

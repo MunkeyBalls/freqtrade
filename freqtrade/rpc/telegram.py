@@ -102,7 +102,7 @@ class Telegram(RPCHandler):
         # ]
         self._keyboard: List[List[Union[str, KeyboardButton]]] = [
             ['/daily', '/start', '/stop', '/help'],
-            ['/whitelist', '/profit', '/forcebuy'],
+            ['/stopbuy', '/profit', '/forcebuy'],
             ['/balance', '/status table', '/performance']
         ]
         # do not allow commands with mandatory arguments and critical cmds
@@ -113,7 +113,7 @@ class Telegram(RPCHandler):
         valid_keys: List[str] = [r'/start$', r'/stop$', r'/status$', r'/status table$',
                                  r'/trades$', r'/performance$', r'/daily$', r'/daily \d+$',
                                  r'/profit$', r'/profit \d+',
-                                 r'/stats$', r'/count$', r'/locks$', r'/balance$',
+                                 r'/stats$', r'/count$', r'/locks$', r'/add_lock$', r'/balance$',
                                  r'/stopbuy$', r'/reload_config$', r'/show_config$',
                                  r'/logs$', r'/whitelist$', r'/blacklist$', r'/edge$',
                                  r'/forcebuy$', r'/help$', r'/version$', r'/avg$', r'/merge$']
@@ -162,6 +162,7 @@ class Telegram(RPCHandler):
             CommandHandler('daily', self._daily),
             CommandHandler('count', self._count),
             CommandHandler('locks', self._locks),
+            CommandHandler('add_lock', self._add_lock),
             CommandHandler(['unlock', 'delete_locks'], self._delete_locks),
             CommandHandler(['reload_config', 'reload_conf'], self._reload_config),
             CommandHandler(['show_config', 'show_conf'], self._show_config),
@@ -1004,6 +1005,18 @@ class Telegram(RPCHandler):
             message = f"<pre>{escape(message)}</pre>"
             logger.debug(message)
             self._send_msg(message, parse_mode=ParseMode.HTML)
+
+    @authorized_only
+    def _add_lock(self, update: Update, context: CallbackContext) -> None:
+        """
+        Handler for /add_lock.
+        Adds a locked pair
+        """
+        if context.args:
+            pair = context.args[0]
+            minutes = float(context.args[1]) if len(context.args) > 1 else None
+            self._rpc._rpc_add_lock(pair=pair, minutes=minutes)
+            self._locks(update, context)
 
     @authorized_only
     def _delete_locks(self, update: Update, context: CallbackContext) -> None:
