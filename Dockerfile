@@ -45,6 +45,8 @@ ENV LD_LIBRARY_PATH /usr/local/lib
 
 COPY --from=python-deps --chown=ftuser:ftuser /home/ftuser/.local /home/ftuser/.local
 
+RUN apt-get -y install nano
+
 USER ftuser
 # Install and execute
 COPY --chown=ftuser:ftuser . /freqtrade/
@@ -52,6 +54,8 @@ COPY --chown=ftuser:ftuser . /freqtrade/
 RUN pip install -e . --user --no-cache-dir --no-build-isolation \
   && mkdir /freqtrade/user_data/ \
   && freqtrade install-ui
+
+RUN pip install --user --no-cache-dir pandas-ta  
 
 ENTRYPOINT ["freqtrade"]
 # Default to trade mode
