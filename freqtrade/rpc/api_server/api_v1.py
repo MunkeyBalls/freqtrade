@@ -159,13 +159,14 @@ def delete_lock(lockid: int, rpc: RPC = Depends(get_rpc)):
     return rpc._rpc_delete_lock(lockid=lockid)
 
 
+@router.post('/locks/add', response_model=Locks, tags=['info', 'locks'])
+def add_lock(payload: AddLockRequest, rpc: RPC = Depends(get_rpc)):
+    return rpc._rpc_add_lock(pair=payload.pair, minutes=payload.minutes, reason=payload.reason)
+    
+
 @router.post('/locks/delete', response_model=Locks, tags=['info', 'locks'])
 def delete_lock_pair(payload: DeleteLockRequest, rpc: RPC = Depends(get_rpc)):
     return rpc._rpc_delete_lock(lockid=payload.lockid, pair=payload.pair)
-
-@router.post('/addlock', response_model=Locks, tags=['info', 'locks'])
-def add_lock(payload: AddLockRequest, rpc: RPC = Depends(get_rpc)):
-    return rpc._rpc_add_lock(pair=payload.pair, minutes=payload.minutes, reason=payload.reason)       
 
 
 @router.get('/logs', response_model=Logs, tags=['info'])
