@@ -349,6 +349,49 @@ class RPC:
             self._freqtrade.merge_average_trade(pair)
             return pairtrades_list
 
+    def _rpc_update_hold(self, id: str, pct: float) -> Tuple[str, float]:
+        trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
+        trade = Trade.get_trades(trade_filter).first() 
+
+        if not trade:
+            logger.warning('update_hold: Invalid argument received')
+            raise RPCException(f"Pair not found")
+        else:
+            self._freqtrade.update_hold(id, pct)
+    
+        return [trade.id, pct]
+
+    def _rpc_status_hold(self) -> Tuple[List, List, float]:
+
+        trades = Trade.get_open_trades()
+        if not trades:
+            raise RPCException('no active trade')
+        else:
+            trades_list = []
+            for trade in trades:
+                # calculate profit and send message to user
+                try:
+                    current_rate = self._freqtrade.exchange.get_rate(
+                        trade.pair, refresh=False, side="sell")
+                except (PricingError, ExchangeError):
+                    current_rate = NAN
+                trade_percent = (100 * trade.calc_profit_ratio(current_rate))
+                profit_str = f'( {trade_percent:.2f}% )'
+                hold_pct_str = f'{trade.hold_pct:.2f}%'
+                
+                trades_list.append([
+                    trade.id,
+                    trade.pair + ('*' if (trade.open_order_id is not None
+                                          and trade.close_rate_requested is None) else '')
+                               + ('**' if (trade.close_rate_requested is not None) else ''),
+                    shorten_date(arrow.get(trade.open_date).humanize(only_distance=True)),
+                    hold_pct_str,
+                    profit_str                    
+                ])
+
+            columns = ['ID', 'Pair', 'Since', "Hold", "Profit"]
+            return trades_list, columns
+
     def _rpc_daily_profit(
             self, timescale: int,
             stake_currency: str, fiat_display_currency: str) -> Dict[str, Any]:

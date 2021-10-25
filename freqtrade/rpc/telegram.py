@@ -116,7 +116,8 @@ class Telegram(RPCHandler):
                                  r'/stats$', r'/count$', r'/locks$', r'/add_lock$', r'/balance$',
                                  r'/stopbuy$', r'/reload_config$', r'/show_config$',
                                  r'/logs$', r'/whitelist$', r'/blacklist$', r'/edge$',
-                                 r'/forcebuy$', r'/help$', r'/version$', r'/avg$', r'/merge$']
+                                 r'/forcebuy$', r'/help$', r'/version$', r'/avg$', r'/merge$', 
+                                 r'/hold$']
         # Create keys for generation
         valid_keys_print = [k.replace('$', '') for k in valid_keys]
 
@@ -175,6 +176,7 @@ class Telegram(RPCHandler):
             CommandHandler('version', self._version),
             CommandHandler('avg', self._avg),
             CommandHandler('merge', self._merge),
+            CommandHandler('hold', self._update_hold),
         ]
         callbacks = [
             CallbackQueryHandler(self._status_table, pattern='update_status_table'),
@@ -504,6 +506,39 @@ class Telegram(RPCHandler):
             self._send_msg(f"Trade {trade_id_list} of {pair} have been merged.")
             for trade_id in trade_id_list:
                 self._rpc._rpc_delete(trade_id)
+        except RPCException as e:
+            self._send_msg(str(e))
+
+    @authorized_only
+    def _update_hold(self, update: Update, context: CallbackContext) -> None:
+        id = context.args[0] if context.args and len(context.args) > 0 else None
+
+        if len(context.args) > 1:
+            pct = float(context.args[1])
+        else:
+            pct = 0.01
+
+        if not id:
+            self._send_msg("PairId required to add to hold")
+
+        try:
+            if id:
+                self._rpc._rpc_update_hold(id, pct)
+                if pct != 0:
+                    self._send_msg(f"Set trade {id} to hold until {pct}%")
+                else:
+                    self._send_msg(f"Removed trade {id} from hold")
+
+            # Put in it's own method
+            statlist, head = self._rpc._rpc_status_hold()        
+            max_trades_per_msg = 50
+            messages_count = max(int(len(statlist) / max_trades_per_msg + 0.99), 1)
+            for i in range(0, messages_count):
+                trades = statlist[i * max_trades_per_msg:(i + 1) * max_trades_per_msg]
+                message = tabulate(trades,
+                                headers=head,
+                                tablefmt='simple')               
+                self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML)
         except RPCException as e:
             self._send_msg(str(e))
 
@@ -848,8 +883,8 @@ class Telegram(RPCHandler):
             price = 0.0
             custom_stake_amount = 0.0
 
-            if len(context.args) is 3:
-                if context.args[2] is 0:
+            if len(context.args) == 3:
+                if context.args[2] == 0:
                     pair = context.args[0]
                     price = None
                     custom_stake_amount = float(context.args[1])
@@ -859,11 +894,11 @@ class Telegram(RPCHandler):
                     price = float(context.args[2])
                     custom_stake_amount = float(context.args[1])
                     self._forcebuy_action(pair, price, custom_stake_amount)
-            elif len(context.args) is 2:
+            elif len(context.args) == 2:
                 pair = context.args[0]
                 custom_stake_amount = float(context.args[1])
                 self._forcebuy_action(pair, None, custom_stake_amount)
-            elif len(context.args) is 1:
+            elif len(context.args) == 1:
                 pair = context.args[0]
                 self._forcebuy_action(pair, None, None)
 
@@ -1164,6 +1199,8 @@ class Telegram(RPCHandler):
                    "Avg. holding durationsfor buys and sells.`\n"
                    "*/count:* `Show number of active trades compared to allowed number of trades`\n"
                    "*/locks:* `Show currently locked pairs`\n"
+                   "*/add_lock <trade_id> [<minutes>]:* `Add a pair lock`\n"
+                   "*/hold <id> [<percentage>]:* `Hold a pair until profit percentage is met`\n"
                    "*/unlock <pair|id>:* `Unlock this Pair (or this lock id if it's numeric)`\n"
                    "*/balance:* `Show account balance per currency`\n"
                    "*/stopbuy:* `Stops buying, but handles open trades gracefully` \n"

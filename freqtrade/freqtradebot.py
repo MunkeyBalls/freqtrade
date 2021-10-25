@@ -594,6 +594,17 @@ class FreqtradeBot(LoggingMixin):
 
         return True
 
+    def update_hold(self, id: str, pct: float) -> bool:
+        trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
+        pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()
+        if not pairtrades:
+            return False        
+
+        for pairtrade in pairtrades:
+            pairtrade.hold_pct = pct
+            
+        Trade.commit()
+
     def merge_average_trade(self, pair: str) -> bool:
         trade_filter = (Trade.is_open.is_(True) & (Trade.pair == pair))
         pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()
@@ -610,16 +621,21 @@ class FreqtradeBot(LoggingMixin):
             trade_fee_open_cost_list = []
             trade_fee_open_currency_list = []
             trade_fee_close_list = []
+            trade_hold_pct_list = []
             trade_exchange_list = []
             trade_open_order_id_list = []
             trade_strategy_list = []
             trade_buy_tag_list = []
             trade_timeframe_list = []
             trade_id_list = []
-            max_rate = 0
-            min_rate = 0
+            trade_minmax_list = []
 
             for pairtrade in pairtrades:
+                # Don't merge orders that can still time-out
+                if pairtrade.open_order_id is not None and pairtrade.close_rate_requested is None: 
+                    logger.warning('Unable to merge trade %s because its open', pairtrade.id)
+                    return False
+
                 trade_open_rate_list.append(pairtrade.open_rate)
                 trade_amount_list.append(pairtrade.amount)
                 trade_amount_requested_list.append(pairtrade.amount_requested)
@@ -633,21 +649,23 @@ class FreqtradeBot(LoggingMixin):
                 trade_open_order_id_list.append(pairtrade.open_order_id)
                 trade_strategy_list.append(pairtrade.strategy)
                 trade_buy_tag_list.append(pairtrade.buy_tag)
+                trade_hold_pct_list.append(pairtrade.hold_pct)
                 trade_timeframe_list.append(pairtrade.timeframe)
                 trade_id_list.append(pairtrade.id)
-                max_rate = pairtrade.max_rate if max_rate is 0 or pairtrade.max_rate > max_rate else max_rate
-                min_rate = pairtrade.min_rate if min_rate is 0 or pairtrade.min_rate < min_rate else min_rate
+                trade_minmax_list.append(pairtrade.min_rate)
+                trade_minmax_list.append(pairtrade.max_rate)
 
-            # fee = self.exchange.get_fee(symbol=pair, taker_or_maker='maker')
+            trade_hold_pct_list = list(filter(None, trade_hold_pct_list))
+            trade_buy_tag_list = list(filter(None, trade_buy_tag_list)) 
+            trade_minmax_list = list(filter(None, trade_minmax_list))
+
             new_trade = Trade(
                 pair=pair,
                 stake_amount=sum(trade_stake_amount_list),
                 amount=sum(trade_amount_list),
                 is_open=True,
-                # amount_requested=float(sum(trade_amount_requested_list)),
                 amount_requested=sum(filter(None, trade_amount_requested_list)),
                 fee_open=float(sum(trade_fee_open_list) / len(trade_fee_open_list)),
-                # fee_open_cost=sum(trade_fee_open_cost_list),
                 fee_open_cost=sum(filter(None, trade_fee_open_cost_list)),
                 fee_open_currency=trade_fee_open_currency_list[-1], # not sure how to handle multiple fee currencies
                 fee_close=float(sum(trade_fee_close_list) / len(trade_fee_close_list)),
@@ -656,10 +674,11 @@ class FreqtradeBot(LoggingMixin):
                 exchange=trade_exchange_list[-1],
                 open_order_id=trade_open_order_id_list[-1],
                 strategy=trade_strategy_list[-1],
-                buy_tag=trade_buy_tag_list[-1],
+                buy_tag=''.join(str(e) for e in trade_buy_tag_list),
                 timeframe=trade_timeframe_list[-1],
-                max_rate=max_rate,
-                min_rate=min_rate
+                max_rate=max(trade_minmax_list) if len(trade_minmax_list) > 0 else None,
+                min_rate=min(trade_minmax_list) if len(trade_minmax_list) > 0 else None,
+                hold_pct=max(trade_hold_pct_list) if len(trade_hold_pct_list) > 0 else 0
             )
 
             self.update_trade_to_merge(new_trade, trade_open_order_id_list[-1])

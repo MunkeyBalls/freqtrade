@@ -259,6 +259,7 @@ class LocalTrade():
     strategy: str = ''
     buy_tag: Optional[str] = None
     timeframe: Optional[int] = None
+    hold_pct: Optional[float] = None
 
     def __init__(self, **kwargs):
         for key in kwargs:
@@ -291,6 +292,7 @@ class LocalTrade():
             'strategy': self.strategy,
             'buy_tag': self.buy_tag,
             'timeframe': self.timeframe,
+            'hold_pct': self.hold_pct,
 
             'fee_open': self.fee_open,
             'fee_open_cost': self.fee_open_cost,
@@ -707,6 +709,7 @@ class Trade(_DECL_BASE, LocalTrade):
     strategy = Column(String(100), nullable=True)
     buy_tag = Column(String(100), nullable=True)
     timeframe = Column(Integer, nullable=True)
+    hold_pct = Column(Float, nullable=True, default=0.0)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
