@@ -616,8 +616,8 @@ class FreqtradeBot(LoggingMixin):
             trade_buy_tag_list = []
             trade_timeframe_list = []
             trade_id_list = []
-            max_rate = 0
-            min_rate = 0
+            max_rate = 0.0
+            min_rate = 0.0
 
             for pairtrade in pairtrades:
                 trade_open_rate_list.append(pairtrade.open_rate)
@@ -635,8 +635,19 @@ class FreqtradeBot(LoggingMixin):
                 trade_buy_tag_list.append(pairtrade.buy_tag)
                 trade_timeframe_list.append(pairtrade.timeframe)
                 trade_id_list.append(pairtrade.id)
-                max_rate = pairtrade.max_rate if max_rate is 0 or pairtrade.max_rate > max_rate else max_rate
-                min_rate = pairtrade.min_rate if min_rate is 0 or pairtrade.min_rate < min_rate else min_rate
+
+                if pairtrade.max_rate is None:
+                    max_rate = 0.0
+                else:
+                    max_rate = pairtrade.max_rate if max_rate is 0 or pairtrade.max_rate > max_rate else max_rate
+
+                if pairtrade.min_rate is None:
+                    min_rate = 0.0
+                else:
+                    min_rate = pairtrade.min_rate if min_rate is 0 or pairtrade.min_rate < min_rate else min_rate
+
+                # max_rate = pairtrade.max_rate if max_rate is 0 or pairtrade.max_rate > max_rate else max_rate
+                # min_rate = pairtrade.min_rate if min_rate is 0 or pairtrade.min_rate < min_rate else min_rate
 
             # fee = self.exchange.get_fee(symbol=pair, taker_or_maker='maker')
             new_trade = Trade(
