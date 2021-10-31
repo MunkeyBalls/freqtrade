@@ -55,7 +55,7 @@ RUN pip install -e . --user --no-cache-dir --no-build-isolation \
   && mkdir /freqtrade/user_data/ \
   && freqtrade install-ui
 
-RUN pip install --user --no-cache-dir pandas-ta  
+RUN pip install --user --no-cache-dir pandas-ta paho-mqtt
 
 ENTRYPOINT ["freqtrade"]
 # Default to trade mode

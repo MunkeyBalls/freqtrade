@@ -292,6 +292,22 @@ CONF_SCHEMA = {
             },
             'required': ['enabled', 'token', 'chat_id'],
         },
+        'mqtt': {
+            'type': 'object',
+            'properties': {
+                'enabled': {'type': 'boolean'},
+                'ip': {'type': 'string'},
+                'port': {
+                    'type': 'integer',
+                    'minimum': 1024,
+                    'maximum': 65535
+                },
+                'topic': {'type': 'string'},                
+                'user': {'type': 'string'},
+                'password': {'type': 'string'}
+            },
+            'required': ['enabled', 'ip', 'port', 'topic'],
+        },
         'webhook': {
             'type': 'object',
             'properties': {
