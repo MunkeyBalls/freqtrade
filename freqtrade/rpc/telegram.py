@@ -514,9 +514,9 @@ class Telegram(RPCHandler):
         id = context.args[0] if context.args and len(context.args) > 0 else None
 
         if len(context.args) > 1:
-            pct = float(context.args[1])
+            pct = float(context.args[1]) / 100
         else:
-            pct = 0.01
+            pct = 0.001
 
         if not id:
             self._send_msg("PairId required to add to hold")
@@ -525,9 +525,9 @@ class Telegram(RPCHandler):
             if id:
                 self._rpc._rpc_update_hold(id, pct)
                 if pct != 0:
-                    self._send_msg(f"Set trade {id} to hold until {pct}%")
+                    self._send_msg(f"Set trade {id} to hold until {pct * 100}%")
                 else:
-                    self._send_msg(f"Removed trade {id} from hold")
+                    self._send_msg(f"Removed trade {id} from hold") 
 
             # Put in it's own method
             statlist, head = self._rpc._rpc_status_hold()        

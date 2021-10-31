@@ -354,8 +354,11 @@ class RPC:
         trade = Trade.get_trades(trade_filter).first() 
 
         if not trade:
-            logger.warning('update_hold: Invalid argument received')
+            logger.warning('update_hold: Invalid id argument received')
             raise RPCException(f"Pair not found")
+        if pct <= -1:
+            logger.warning('update_hold: Invalid percentage argument received')
+            raise RPCException(f"Hold percentage needs to be greater than -100%")
         else:
             self._freqtrade.update_hold(id, pct)
     
@@ -377,7 +380,8 @@ class RPC:
                     current_rate = NAN
                 trade_percent = (100 * trade.calc_profit_ratio(current_rate))
                 profit_str = f'( {trade_percent:.2f}% )'
-                hold_pct_str = f'{trade.hold_pct:.2f}%'
+                hold_pct = 100 * trade.hold_pct
+                hold_pct_str = f'{hold_pct:.2f}%'
                 
                 trades_list.append([
                     trade.id,

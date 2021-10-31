@@ -596,13 +596,12 @@ class FreqtradeBot(LoggingMixin):
 
     def update_hold(self, id: str, pct: float) -> bool:
         trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
-        pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()
-        if not pairtrades:
-            return False        
+        pairtrade = Trade.get_trades(trade_filter).order_by(Trade.id).first()        
+        if not pairtrade:
+            return False
 
-        for pairtrade in pairtrades:
-            pairtrade.hold_pct = pct
-            
+        pairtrade.hold_pct =  pct if pct else 0.0
+        
         Trade.commit()
 
     def merge_average_trade(self, pair: str) -> bool:
@@ -1158,6 +1157,24 @@ class FreqtradeBot(LoggingMixin):
             raise DependencyException(
                 f"Not enough amount to sell. Trade-amount: {amount}, Wallet: {wallet_amount}")
 
+    def _should_hold_trade(self, trade: Trade, sell_reason: SellCheckTuple, rate: float) -> bool:        
+        hold_trade = False
+        if hasattr(trade, 'hold_pct') and trade.hold_pct is not None:        
+            if trade.hold_pct != 0.0 and sell_reason != "force_sell" and sell_reason != "trailing_stop_loss":
+                hold_trade = True
+                current_profit_ratio = trade.calc_profit_ratio(rate) * 100
+                if current_profit_ratio >= trade.hold_pct:
+                    formatted_profit_ratio = f"{trade.hold_pct * 100}%"
+                    formatted_current_profit_ratio = f"{current_profit_ratio * 100}%"
+                    logger.warning(
+                        "Selling %s because the current profit of %s >= %s",
+                        trade, formatted_current_profit_ratio, formatted_profit_ratio
+                    )
+                    hold_trade = False
+
+        logger.warn("Should hold trade: %s", hold_trade)
+        return hold_trade        
+
     def execute_trade_exit(self, trade: Trade, limit: float, sell_reason: SellCheckTuple) -> bool:
         """
         Executes a trade exit for the given trade and limit
@@ -1214,6 +1231,12 @@ class FreqtradeBot(LoggingMixin):
                 current_time=datetime.now(timezone.utc)):
             logger.info(f"User requested abortion of selling {trade.pair}")
             return False
+
+        # Abort sell if trade is in hold
+        if self._should_hold_trade(trade, sell_reason, limit) :
+            logger.info(f"Aborted selling {trade.pair} because of active hold")
+            return False
+
 
         try:
             # Execute sell and update trade record
