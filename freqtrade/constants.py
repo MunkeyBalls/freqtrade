@@ -24,13 +24,16 @@ ORDERTYPE_POSSIBILITIES = ['limit', 'market']
 ORDERTIF_POSSIBILITIES = ['gtc', 'fok', 'ioc']
 HYPEROPT_LOSS_BUILTIN = ['ShortTradeDurHyperOptLoss', 'OnlyProfitHyperOptLoss',
                          'SharpeHyperOptLoss', 'SharpeHyperOptLossDaily',
-                         'SortinoHyperOptLoss', 'SortinoHyperOptLossDaily']
+                         'SortinoHyperOptLoss', 'SortinoHyperOptLossDaily',
+                         'CalmarHyperOptLoss',
+                         'MaxDrawDownHyperOptLoss']
 AVAILABLE_PAIRLISTS = ['StaticPairList', 'VolumePairList',
                        'AgeFilter', 'OffsetFilter', 'PerformanceFilter',
                        'PrecisionFilter', 'PriceFilter', 'RangeStabilityFilter',
                        'ShuffleFilter', 'SpreadFilter', 'VolatilityFilter']
 AVAILABLE_PROTECTIONS = ['CooldownPeriod', 'LowProfitPairs', 'MaxDrawdown', 'StoplossGuard']
 AVAILABLE_DATAHANDLERS = ['json', 'jsongz', 'hdf5']
+BACKTEST_BREAKDOWNS = ['day', 'week', 'month']
 DRY_RUN_WALLET = 1000
 DATETIME_PRINT_FORMAT = '%Y-%m-%d %H:%M:%S'
 MATH_CLOSE_PREC = 1e-14  # Precision used for float comparisons
@@ -51,7 +54,6 @@ ENV_VAR_PREFIX = 'FREQTRADE__'
 
 NON_OPEN_EXCHANGE_STATES = ('cancelled', 'canceled', 'closed', 'expired')
 
-
 # Define decimals per coin for outputs
 # Only used for outputs.
 DECIMAL_PER_COIN_FALLBACK = 3  # Should be low to avoid listing all possible FIAT's
@@ -65,13 +67,10 @@ DUST_PER_COIN = {
     'ETH': 0.01
 }
 
-
 # Source files with destination directories within user-directory
 USER_DATA_FILES = {
     'sample_strategy.py': USERPATH_STRATEGIES,
-    'sample_hyperopt_advanced.py': USERPATH_HYPEROPTS,
     'sample_hyperopt_loss.py': USERPATH_HYPEROPTS,
-    'sample_hyperopt.py': USERPATH_HYPEROPTS,
     'strategy_analysis_example.ipynb': USERPATH_NOTEBOOKS,
 }
 
@@ -112,7 +111,7 @@ CONF_SCHEMA = {
         },
         'tradable_balance_ratio': {
             'type': 'number',
-            'minimum': 0.1,
+            'minimum': 0.0,
             'maximum': 1,
             'default': 0.99
         },
@@ -147,6 +146,10 @@ CONF_SCHEMA = {
         'sell_profit_offset': {'type': 'number'},
         'ignore_roi_if_buy_signal': {'type': 'boolean'},
         'ignore_buying_expired_candle_after': {'type': 'number'},
+        'backtest_breakdown': {
+            'type': 'array',
+            'items': {'type': 'string', 'enum': BACKTEST_BREAKDOWNS}
+        },
         'bot_name': {'type': 'string'},
         'unfilledtimeout': {
             'type': 'object',
@@ -194,7 +197,7 @@ CONF_SCHEMA = {
             'required': ['price_side']
         },
         'custom_price_max_distance_ratio': {
-           'type': 'number', 'minimum': 0.0
+            'type': 'number', 'minimum': 0.0
         },
         'order_types': {
             'type': 'object',
@@ -286,6 +289,15 @@ CONF_SCHEMA = {
                             'enum': TELEGRAM_SETTING_OPTIONS,
                             'default': 'off'
                         },
+                        'protection_trigger': {
+                            'type': 'string',
+                            'enum': TELEGRAM_SETTING_OPTIONS,
+                            'default': 'off'
+                        },
+                        'protection_trigger_global': {
+                            'type': 'string',
+                            'enum': TELEGRAM_SETTING_OPTIONS,
+                        },
                     }
                 },
                 'reload': {'type': 'boolean'},
@@ -354,13 +366,13 @@ CONF_SCHEMA = {
         },
         'dataformat_ohlcv': {
             'type': 'string',
-                    'enum': AVAILABLE_DATAHANDLERS,
-                    'default': 'json'
+            'enum': AVAILABLE_DATAHANDLERS,
+            'default': 'json'
         },
         'dataformat_trades': {
             'type': 'string',
-                    'enum': AVAILABLE_DATAHANDLERS,
-                    'default': 'jsongz'
+            'enum': AVAILABLE_DATAHANDLERS,
+            'default': 'jsongz'
         }
     },
     'definitions': {

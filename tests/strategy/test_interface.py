@@ -575,6 +575,13 @@ def test_is_pair_locked(default_conf):
     strategy.unlock_pair(pair)
     assert not strategy.is_pair_locked(pair)
 
+    # Lock with reason
+    reason = "TestLockR"
+    strategy.lock_pair(pair, arrow.now(timezone.utc).shift(minutes=4).datetime, reason)
+    assert strategy.is_pair_locked(pair)
+    strategy.unlock_reason(reason)
+    assert not strategy.is_pair_locked(pair)
+
     pair = 'BTC/USDT'
     # Lock until 14:30
     lock_time = datetime(2020, 5, 1, 14, 30, 0, tzinfo=timezone.utc)
@@ -607,7 +614,7 @@ def test_is_informative_pairs_callback(default_conf):
     strategy = StrategyResolver.load_strategy(default_conf)
     # Should return empty
     # Uses fallback to base implementation
-    assert [] == strategy.informative_pairs()
+    assert [] == strategy.gather_informative_pairs()
 
 
 @pytest.mark.parametrize('error', [
@@ -735,10 +742,15 @@ def test_auto_hyperopt_interface(default_conf):
     PairLocks.timeframe = default_conf['timeframe']
     strategy = StrategyResolver.load_strategy(default_conf)
 
+    with pytest.raises(OperationalException):
+        next(strategy.enumerate_parameters('deadBeef'))
+
     assert strategy.buy_rsi.value == strategy.buy_params['buy_rsi']
     # PlusDI is NOT in the buy-params, so default should be used
     assert strategy.buy_plusdi.value == 0.5
     assert strategy.sell_rsi.value == strategy.sell_params['sell_rsi']
+
+    assert repr(strategy.sell_rsi) == 'IntParameter(74)'
 
     # Parameter is disabled - so value from sell_param dict will NOT be used.
     assert strategy.sell_minusdi.value == 0.5

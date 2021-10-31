@@ -26,6 +26,7 @@ from freqtrade.constants import DUST_PER_COIN
 from freqtrade.enums import RPCMessageType
 from freqtrade.exceptions import OperationalException
 from freqtrade.misc import chunks, plural, round_coin_value
+from freqtrade.persistence import Trade
 from freqtrade.rpc import RPC, RPCException, RPCHandler
 
 import paho.mqtt.client as mqtt
@@ -63,7 +64,8 @@ def authorized_only(command_handler: Callable[..., None]) -> Callable[..., Any]:
                 update.message.chat_id
             )
             return wrapper
-
+        # Rollback session to avoid getting data stored in a transaction.
+        Trade.query.session.rollback()
         logger.debug(
             'Executing handler: %s for chat_id: %s',
             command_handler.__name__,
@@ -319,6 +321,53 @@ class Telegram(RPCHandler):
 
         return message
 
+    def compose_message(self, msg: Dict[str, Any], msg_type: RPCMessageType) -> str:
+
+        if msg_type == RPCMessageType.BUY:
+            message = self._format_buy_msg(msg)
+            self._send_mqtt(str(msg_type), msg['pair'])
+
+        elif msg_type in (RPCMessageType.BUY_CANCEL, RPCMessageType.SELL_CANCEL):
+            msg['message_side'] = 'buy' if msg_type == RPCMessageType.BUY_CANCEL else 'sell'
+            message = ("\N{WARNING SIGN} *{exchange}:* "
+                       "Cancelling open {message_side} Order for {pair} (#{trade_id}). "
+                       "Reason: {reason}.".format(**msg))
+
+        elif msg_type == RPCMessageType.BUY_FILL:
+            self._send_mqtt(str(msg_type), msg['pair'])
+
+            message = ("\N{LARGE CIRCLE} *{exchange}:* "
+                       "Buy order for {pair} (#{trade_id}) filled "
+                       "for {open_rate}.".format(**msg))
+        elif msg_type == RPCMessageType.SELL_FILL:
+            message = ("\N{LARGE CIRCLE} *{exchange}:* "
+                       "Sell order for {pair} (#{trade_id}) filled "
+                       "for {close_rate}.".format(**msg))
+        elif msg_type == RPCMessageType.SELL:
+            message = self._format_sell_msg(msg)
+        elif msg_type == RPCMessageType.PROTECTION_TRIGGER:
+            message = (
+                "*Protection* triggered due to {reason}. "
+                "`{pair}` will be locked until `{lock_end_time}`."
+            ).format(**msg)
+        elif msg_type == RPCMessageType.PROTECTION_TRIGGER_GLOBAL:
+            message = (
+                "*Protection* triggered due to {reason}. "
+                "*All pairs* will be locked until `{lock_end_time}`."
+            ).format(**msg)
+        elif msg_type == RPCMessageType.STATUS:
+            message = '*Status:* `{status}`'.format(**msg)
+
+        elif msg_type == RPCMessageType.WARNING:
+            message = '\N{WARNING SIGN} *Warning:* `{status}`'.format(**msg)
+
+        elif msg_type == RPCMessageType.STARTUP:
+            message = '{status}'.format(**msg)
+
+        else:
+            raise NotImplementedError('Unknown message type: {}'.format(msg_type))
+        return message
+
     def send_msg(self, msg: Dict[str, Any]) -> None:
         """ Send a message to telegram channel """
 
@@ -343,40 +392,7 @@ class Telegram(RPCHandler):
             # Notification disabled
             return
 
-        if msg_type == RPCMessageType.BUY:
-            message = self._format_buy_msg(msg)
-            self._send_mqtt(str(msg_type), msg['pair'])
-
-        elif msg_type in (RPCMessageType.BUY_CANCEL, RPCMessageType.SELL_CANCEL):
-            msg['message_side'] = 'buy' if msg_type == RPCMessageType.BUY_CANCEL else 'sell'
-            message = ("\N{WARNING SIGN} *{exchange}:* "
-                       "Cancelling open {message_side} Order for {pair} (#{trade_id}). "
-                       "Reason: {reason}.".format(**msg))
-
-        elif msg_type == RPCMessageType.BUY_FILL:
-            self._send_mqtt(str(msg_type), msg['pair'])
-
-            message = ("\N{LARGE CIRCLE} *{exchange}:* "
-                       "Buy order for {pair} (#{trade_id}) filled "
-                       "for {open_rate}.".format(**msg))
-        elif msg_type == RPCMessageType.SELL_FILL:
-            message = ("\N{LARGE CIRCLE} *{exchange}:* "
-                       "Sell order for {pair} (#{trade_id}) filled "
-                       "for {close_rate}.".format(**msg))
-        elif msg_type == RPCMessageType.SELL:
-            message = self._format_sell_msg(msg)
-
-        elif msg_type == RPCMessageType.STATUS:
-            message = '*Status:* `{status}`'.format(**msg)
-
-        elif msg_type == RPCMessageType.WARNING:
-            message = '\N{WARNING SIGN} *Warning:* `{status}`'.format(**msg)
-
-        elif msg_type == RPCMessageType.STARTUP:
-            message = '{status}'.format(**msg)
-
-        else:
-            raise NotImplementedError('Unknown message type: {}'.format(msg_type))
+        message = self.compose_message(msg, msg_type)
 
         #self._send_mqtt(str(msg_type), msg)
         self._send_msg(message, disable_notification=(noti == 'silent'))
@@ -759,12 +775,15 @@ class Telegram(RPCHandler):
 
             output = ''
             if self._config['dry_run']:
-                output += (
-                    f"*Warning:* Simulated balances in Dry Mode.\n"
-                    "This mode is still experimental!\n"
-                    "Starting capital: "
-                    f"`{self._config['dry_run_wallet']}` {self._config['stake_currency']}.\n"
-                )
+                output += "*Warning:* Simulated balances in Dry Mode.\n"
+
+            output += ("Starting capital: "
+                       f"`{result['starting_capital']}` {self._config['stake_currency']}"
+                       )
+            output += (f" `{result['starting_capital_fiat']}` "
+                       f"{self._config['fiat_display_currency']}.\n"
+                       ) if result['starting_capital_fiat'] > 0 else '.\n'
+
             total_dust_balance = 0
             total_dust_currencies = 0
             for curr in result['currencies']:
@@ -797,9 +816,12 @@ class Telegram(RPCHandler):
                     f"{round_coin_value(total_dust_balance, result['stake'], False)}`\n")
 
             output += ("\n*Estimated Value*:\n"
-                       f"\t`{result['stake']}: {result['total']: .8f}`\n"
+                       f"\t`{result['stake']}: "
+                       f"{round_coin_value(result['total'], result['stake'], False)}`"
+                       f" `({result['starting_capital_pct']}%)`\n"
                        f"\t`{result['symbol']}: "
-                       f"{round_coin_value(result['value'], result['symbol'], False)}`\n")
+                       f"{round_coin_value(result['value'], result['symbol'], False)}`"
+                       f" `({result['starting_capital_fiat_pct']}%)`\n")
             self._send_msg(output, reload_able=True, callback_path="update_balance",
                            query=update.callback_query)
         except RPCException as e:
@@ -1225,8 +1247,9 @@ class Telegram(RPCHandler):
         :param update: message update
         :return: None
         """
-        forcebuy_text = ("*/forcebuy <pair> [<rate>] [<stack_amount>]:* `Instantly buys the given pair. "
-                         "Optionally takes a rate at which to buy and the custom stake amount.` \n")
+        forcebuy_text = ("*/forcebuy <pair> [<stake>] [<rate>]:* `Instantly buys the given pair. "
+                         "Optionally takes a rate at which to buy and the custom stake amount "
+                         "(only applies to limit orders).` \n")
         message = ("*/start:* `Starts the trader`\n"
                    "*/stop:* `Stops the trader`\n"
                    "*/status <trade_id>|[table]:* `Lists all open trades`\n"

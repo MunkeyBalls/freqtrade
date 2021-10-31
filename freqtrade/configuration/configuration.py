@@ -242,6 +242,9 @@ class Configuration:
             except ValueError:
                 pass
 
+        self._args_to_config(config, argname='timeframe_detail',
+                             logstring='Parameter --timeframe-detail detected, '
+                             'using {} for intra-candle backtesting ...')
         self._args_to_config(config, argname='stake_amount',
                              logstring='Parameter --stake-amount detected, '
                              'overriding stake_amount to: {} ...')
@@ -266,8 +269,12 @@ class Configuration:
         self._args_to_config(config, argname='export',
                              logstring='Parameter --export detected: {} ...')
 
+        self._args_to_config(config, argname='backtest_breakdown',
+                             logstring='Parameter --breakdown detected ...')
+
         self._args_to_config(config, argname='disableparamexport',
                              logstring='Parameter --disableparamexport detected: {} ...')
+
         # Edge section:
         if 'stoploss_range' in self.args and self.args["stoploss_range"]:
             txt_range = eval(self.args["stoploss_range"])
@@ -366,6 +373,9 @@ class Configuration:
         self._args_to_config(config, argname='hyperopt_show_no_header',
                              logstring='Parameter --no-header detected: {}')
 
+        self._args_to_config(config, argname="hyperopt_ignore_missing_space",
+                             logstring="Paramter --ignore-missing-space detected: {}")
+
     def _process_plot_options(self, config: Dict[str, Any]) -> None:
 
         self._args_to_config(config, argname='pairs',
@@ -400,6 +410,9 @@ class Configuration:
 
         self._args_to_config(config, argname='days',
                              logstring='Detected --days: {}')
+
+        self._args_to_config(config, argname='include_inactive',
+                             logstring='Detected --include-inactive-pairs: {}')
 
         self._args_to_config(config, argname='download_trades',
                              logstring='Detected --dl-trades: {}')

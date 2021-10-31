@@ -30,7 +30,7 @@ function check_installed_python() {
             check_installed_pip
             return
         fi
-    done 
+    done
 
     echo "No usable python found. Please make sure to have python3.7 or newer installed"
     exit 1
@@ -62,7 +62,7 @@ function updateenv() {
     then
         REQUIREMENTS_PLOT="-r requirements-plot.txt"
     fi
-    if [ "${SYS_ARCH}" == "armv7l" ]; then
+    if [ "${SYS_ARCH}" == "armv7l" ] || [ "${SYS_ARCH}" == "armv6l" ]; then
         echo "Detected Raspberry, installing cython, skipping hyperopt installation."
         ${PYTHON} -m pip install --upgrade cython
     else
@@ -95,23 +95,19 @@ function install_talib() {
         return
     fi
 
-    cd build_helpers
-    tar zxvf ta-lib-0.4.0-src.tar.gz
-    cd ta-lib
-    sed -i.bak "s|0.00000001|0.000000000000000001 |g" src/ta_func/ta_utility.h
-    ./configure --prefix=/usr/local
-    make
-    sudo make install
-    if [ -x "$(command -v apt-get)" ]; then
-        echo "Updating library path using ldconfig"
-        sudo ldconfig
-    fi
-    cd .. && rm -rf ./ta-lib/
+    cd build_helpers && ./install_ta-lib.sh
+
+    if [ $? -ne 0 ]; then
+        echo "Quitting. Please fix the above error before continuing."
+        cd ..
+        exit 1
+    fi;
+
     cd ..
 }
 
-function install_mac_newer_python_dependencies() {    
-    
+function install_mac_newer_python_dependencies() {
+
     if [ ! $(brew --prefix --installed hdf5 2>/dev/null) ]
     then
         echo "-------------------------"
@@ -119,6 +115,7 @@ function install_mac_newer_python_dependencies() {
         echo "-------------------------"
         brew install hdf5
     fi
+    export HDF5_DIR=$(brew --prefix)
 
     if [ ! $(brew --prefix --installed c-blosc 2>/dev/null) ]
     then
@@ -126,7 +123,8 @@ function install_mac_newer_python_dependencies() {
         echo "Installing c-blosc"
         echo "-------------------------"
         brew install c-blosc
-    fi    
+    fi
+    export CBLOSC_DIR=$(brew --prefix)
 }
 
 # Install bot MacOS
@@ -140,7 +138,7 @@ function install_macos() {
     fi
     #Gets number after decimal in python version
     version=$(egrep -o 3.\[0-9\]+ <<< $PYTHON | sed 's/3.//g')
-    
+
     if [[ $version -ge 9 ]]; then               #Checks if python version >= 3.9
         install_mac_newer_python_dependencies
     fi

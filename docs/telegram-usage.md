@@ -93,7 +93,9 @@ Example configuration showing the different settings:
         "buy_cancel": "silent",
         "sell_cancel": "on",
         "buy_fill": "off",
-        "sell_fill": "off"
+        "sell_fill": "off",
+        "protection_trigger": "off",
+        "protection_trigger_global": "on"
     },
     "reload": true,
     "balance_dust_level": 0.01
@@ -103,6 +105,7 @@ Example configuration showing the different settings:
 `buy` notifications are sent when the order is placed, while `buy_fill` notifications are sent when the order is filled on the exchange.
 `sell` notifications are sent when the order is placed, while `sell_fill` notifications are sent when the order is filled on the exchange.
 `*_fill` notifications are off by default and must be explicitly enabled.
+`protection_trigger` notifications are sent when a protection triggers and `protection_trigger_global` notifications trigger when global protections are triggered.
 
 
 `balance_dust_level` will define what the `/balance` command takes as "dust" - Currencies with a balance below this will be shown.
@@ -168,7 +171,7 @@ official commands. You can ask at any moment for help with `/help`.
 | `/profit [<n>]` | Display a summary of your profit/loss from close trades and some stats about your performance, over the last n days (all trades by default)
 | `/forcesell <trade_id>` | Instantly sells the given trade  (Ignoring `minimum_roi`).
 | `/forcesell all` | Instantly sells all open trades (Ignoring `minimum_roi`).
-| `/forcebuy <pair> [rate]` | Instantly buys the given pair. Rate is optional. (`forcebuy_enable` must be set to True)
+| `/forcebuy <pair> [rate]` | Instantly buys the given pair. Rate is optional and only applies to limit orders. (`forcebuy_enable` must be set to True)
 | `/performance` | Show performance of each finished trade grouped by pair
 | `/balance` | Show account balance per currency
 | `/daily <n>` | Shows profit or loss per day, over the last n days (n defaults to 7)
