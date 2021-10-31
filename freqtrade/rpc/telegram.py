@@ -158,10 +158,10 @@ class Telegram(RPCHandler):
                 #if self._config["mqtt"]["enabled"] == True:
                 logger.warning("Connecting to MQTT broker")
                 hostname = self._config["mqtt"]["ip"]
-                port = self._config["mqtt"]["port"]
-                if self._config.get('mqtt', {}).get('username', False):
-                    self.mqttcmqttc.username_pw_set(self._config["mqtt"]["username"], self._config["mqtt"]["password"])
+                port = self._config["mqtt"]["port"]                
                 self.mqttc = mqtt.Client(self._config["bot_name"] + str(time.time()))
+                if self._config.get('mqtt', {}).get('username', False):
+                    self.mqttc.username_pw_set(self._config["mqtt"]["username"], self._config["mqtt"]["password"])
                 self.mqttc.connected_flag = False
                 self.mqttc.on_connect=self.on_connect
                 self.mqttc.on_disconnect=self.on_disconnect
