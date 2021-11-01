@@ -513,8 +513,11 @@ class FreqtradeBot(LoggingMixin):
         if forcebuy:
             # Forcebuy can define a different ordertype
             order_type = self.strategy.order_types.get('forcebuy', order_type)
+            hold_pct = 0.01
+        else:
+            hold_pct = 0.0            
 
-        if not strategy_safe_wrapper(self.strategy.confirm_trade_entry, default_retval=True)(
+        if forcebuy == False and not strategy_safe_wrapper(self.strategy.confirm_trade_entry, default_retval=True)(
                 pair=pair, order_type=order_type, amount=amount, rate=enter_limit_requested,
                 time_in_force=time_in_force, current_time=datetime.now(timezone.utc)):
             logger.info(f"User requested abortion of buying {pair}")
@@ -576,6 +579,7 @@ class FreqtradeBot(LoggingMixin):
             open_order_id=order_id,
             strategy=self.strategy.get_strategy_name(),
             buy_tag=buy_tag,
+            hold_pct=hold_pct,
             timeframe=timeframe_to_minutes(self.config['timeframe'])
         )
         trade.orders.append(order_obj)
