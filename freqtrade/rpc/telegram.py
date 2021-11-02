@@ -175,17 +175,18 @@ class Telegram(RPCHandler):
         start = timer()
         logger.warning("Trying to send MQTT message")
         #logger.info("Topic: %s Msg: %s", topic, msg)
-        if self.mqttc.connected_flag == True:            
-            try:
-                combined_topic = self._config["mqtt"]["topic"] + "/" + topic
-                self.mqttc.publish(combined_topic, msg)
-            except:
-                logger.warning("Unable to publish MQTT msg")
-        else:
-            logger.warning("MQTT not connected") 
+        if self._config.get('mqtt', {}).get('enabled', False):
+            if self.mqttc.connected_flag == True:            
+                try:
+                    combined_topic = self._config["mqtt"]["topic"] + "/" + topic
+                    self.mqttc.publish(combined_topic, msg)
+                except:
+                    logger.warning("Unable to publish MQTT msg")
+            else:
+                logger.warning("MQTT not connected") 
 
-        end = timer()
-        logger.warn("MQTT Time: %s", end - start)
+            end = timer()
+            logger.warn("MQTT Time: %s", end - start)
 
     def _init(self) -> None:
         """
