@@ -155,8 +155,7 @@ class Telegram(RPCHandler):
     def _init_mqtt(self) -> None:
         try:
             if self._config.get('mqtt', {}).get('enabled', False):
-                #if self._config["mqtt"]["enabled"] == True:
-                logger.warning("Connecting to MQTT broker")
+                logger.info("Connecting to MQTT broker")
                 hostname = self._config["mqtt"]["ip"]
                 port = self._config["mqtt"]["port"]                
                 self.mqttc = mqtt.Client(self._config["bot_name"] + str(time.time()))
@@ -172,21 +171,15 @@ class Telegram(RPCHandler):
             logger.warning("MQTT Exception: %s", str(e))
 
     def _send_mqtt(self, topic: str, msg: str):
-        start = timer()
-        logger.warning("Trying to send MQTT message")
-        #logger.info("Topic: %s Msg: %s", topic, msg)
         if self._config.get('mqtt', {}).get('enabled', False):
-            if self.mqttc.connected_flag == True:            
+            if self.mqttc.connected_flag == True:
                 try:
                     combined_topic = self._config["mqtt"]["topic"] + "/" + topic
                     self.mqttc.publish(combined_topic, msg)
                 except:
                     logger.warning("Unable to publish MQTT msg")
             else:
-                logger.warning("MQTT not connected") 
-
-            end = timer()
-            logger.warn("MQTT Time: %s", end - start)
+                logger.warning("MQTT not connected")
 
     def _init(self) -> None:
         """
@@ -336,7 +329,6 @@ class Telegram(RPCHandler):
 
         elif msg_type == RPCMessageType.BUY_FILL:
             self._send_mqtt(str(msg_type), msg['pair'])
-
             message = ("\N{LARGE CIRCLE} *{exchange}:* "
                        "Buy order for {pair} (#{trade_id}) filled "
                        "for {open_rate}.".format(**msg))
@@ -345,6 +337,7 @@ class Telegram(RPCHandler):
                        "Sell order for {pair} (#{trade_id}) filled "
                        "for {close_rate}.".format(**msg))
         elif msg_type == RPCMessageType.SELL:
+            self._send_mqtt(str(msg_type), msg['pair'])
             message = self._format_sell_msg(msg)
         elif msg_type == RPCMessageType.PROTECTION_TRIGGER:
             message = (

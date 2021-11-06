@@ -623,7 +623,7 @@ class RPC:
                 est_stake = balance.total
             else:
                 try:
-                    pair = self._freqtrade.exchange.get_valid_pair_combination(coin, stake_currency)
+                    pair = self._freqtrade.exchange.get_valid_pair_combination(coin, stake_currency, True)
                     rate = tickers.get(pair, {}).get('bid', None)
                     if rate:
                         if pair.startswith(stake_currency) and not pair.endswith(stake_currency):

@@ -418,13 +418,26 @@ class Exchange:
                 f"Stake-currency '{self._config['stake_currency']}' not compatible with "
                 f"pair-whitelist. Please remove the following pairs: {invalid_pairs}")
 
-    def get_valid_pair_combination(self, curr_1: str, curr_2: str) -> str:
+    def get_valid_pair_combination(self, curr_1: str, curr_2: str, fallback=False) -> str:
         """
         Get valid pair combination of curr_1 and curr_2 by trying both combinations.
         """
+        # BETH doesn't have USDT/BUSD pair
+        # Fall back to ETH to get a price
+        if self._config.get('exchange_balance_fix', False):
+            if curr_1 == "BETH":
+                curr_1 = "ETH"
+
         for pair in [f"{curr_1}/{curr_2}", f"{curr_2}/{curr_1}"]:
             if pair in self.markets and self.markets[pair].get('active'):
                 return pair
+        if fallback and self._config.get('exchange_balance_fix', False):
+            # I personally use BUSD/USDT pairs which means a price can't always be found
+            # To get the correct balance try and get a price with the other pair 
+            curr_3 = "USDT" if curr_2 == "BUSD" else "BUSD"
+            for pair in [f"{curr_1}/{curr_3}", f"{curr_3}/{curr_1}"]:
+                if pair in self.markets and self.markets[pair].get('active'):
+                    return pair
         raise ExchangeError(f"Could not combine {curr_1} and {curr_2} to get a valid pair.")
 
     def validate_timeframes(self, timeframe: Optional[str]) -> None:

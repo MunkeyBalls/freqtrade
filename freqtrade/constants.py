@@ -320,6 +320,7 @@ CONF_SCHEMA = {
             },
             'required': ['enabled', 'ip', 'port', 'topic'],
         },
+        'exchange_balance_fix': {'type': 'boolean'},
         'webhook': {
             'type': 'object',
             'properties': {
