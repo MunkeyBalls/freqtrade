@@ -634,11 +634,6 @@ class FreqtradeBot(LoggingMixin):
             trade_minmax_list = []
 
             for pairtrade in pairtrades:
-                # Don't merge orders that can still time-out
-                if pairtrade.open_order_id is not None and pairtrade.close_rate_requested is None: 
-                    logger.warning('Unable to merge trade %s because its open', pairtrade.id)
-                    return False
-
                 trade_open_rate_list.append(pairtrade.open_rate)
                 trade_amount_list.append(pairtrade.amount)
                 trade_amount_requested_list.append(pairtrade.amount_requested)

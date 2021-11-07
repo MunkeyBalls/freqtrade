@@ -344,6 +344,10 @@ class RPC:
         pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()
         pairtrades_list = []
         for pairtrade in pairtrades:
+            # Don't merge orders that can still time-out
+            if pairtrade.open_order_id is not None and pairtrade.close_rate_requested is None: 
+                raise RPCException(f"Unable to merge trade {pairtrade.id} because it has open orders")
+
             pairtrades_list.append(pairtrade.id)
         if len(pairtrades_list) < 2:
             raise RPCException(f"Need at least 2 trades to merge.")
