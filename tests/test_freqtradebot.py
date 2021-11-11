@@ -321,7 +321,7 @@ def test_create_trade_no_stake_amount(default_conf_usdt, ticker_usdt, fee, mocke
 
 @pytest.mark.parametrize('stake_amount,create,amount_enough,max_open_trades', [
     (5.0, True, True, 99),
-    (0.00005, True, False, 99),
+    (0.04, True, False, 99),  # Amount will be adjusted to min - which is 0.051
     (0, False, True, 99),
     (UNLIMITED_STAKE_AMOUNT, False, True, 0),
 ])
@@ -1618,7 +1618,6 @@ def test_exit_positions_exception(mocker, default_conf_usdt, limit_buy_order_usd
 
     trade = MagicMock()
     trade.open_order_id = None
-    trade.open_fee = 0.001
     trade.pair = 'ETH/USDT'
     trades = [trade]
 
@@ -1725,7 +1724,6 @@ def test_update_trade_state_exception(mocker, default_conf_usdt,
 
     trade = MagicMock()
     trade.open_order_id = '123'
-    trade.open_fee = 0.001
 
     # Test raise of OperationalException exception
     mocker.patch(
@@ -1743,7 +1741,6 @@ def test_update_trade_state_orderexception(mocker, default_conf_usdt, caplog) ->
 
     trade = MagicMock()
     trade.open_order_id = '123'
-    trade.open_fee = 0.001
 
     # Test raise of OperationalException exception
     grm_mock = mocker.patch("freqtrade.freqtradebot.FreqtradeBot.get_real_amount", MagicMock())
@@ -2579,6 +2576,8 @@ def test_execute_trade_exit_up(default_conf_usdt, ticker_usdt, fee, ticker_usdt_
                                  sell_reason=SellCheckTuple(sell_type=SellType.ROI))
     assert rpc_mock.call_count == 0
     assert freqtrade.strategy.confirm_trade_exit.call_count == 1
+    assert id(freqtrade.strategy.confirm_trade_exit.call_args_list[0][1]['trade']) != id(trade)
+    assert freqtrade.strategy.confirm_trade_exit.call_args_list[0][1]['trade'].id == trade.id
 
     # Repatch with true
     freqtrade.strategy.confirm_trade_exit = MagicMock(return_value=True)
@@ -3633,6 +3632,31 @@ def test_get_real_amount_invalid_order(default_conf_usdt, trades_for_order, buy_
 
     # Amount does not change
     assert freqtrade.get_real_amount(trade, limit_buy_order_usdt) == amount
+
+
+def test_get_real_amount_fees_order(default_conf_usdt, market_buy_order_usdt_doublefee,
+                                    fee, mocker):
+
+    tfo_mock = mocker.patch('freqtrade.exchange.Exchange.get_trades_for_order', return_value=[])
+    mocker.patch('freqtrade.exchange.Exchange.get_valid_pair_combination', return_value='BNB/USDT')
+    mocker.patch('freqtrade.exchange.Exchange.fetch_ticker', return_value={'last': 200})
+    trade = Trade(
+        pair='LTC/USDT',
+        amount=30.0,
+        exchange='binance',
+        fee_open=fee.return_value,
+        fee_close=fee.return_value,
+        open_rate=0.245441,
+        open_order_id="123456"
+    )
+    freqtrade = get_patched_freqtradebot(mocker, default_conf_usdt)
+
+    # Amount does not change
+    assert trade.fee_open == 0.0025
+    assert freqtrade.get_real_amount(trade, market_buy_order_usdt_doublefee) == 30.0
+    assert tfo_mock.call_count == 0
+    # Fetch fees from trades dict if available to get "proper" values
+    assert round(trade.fee_open, 4) == 0.001
 
 
 def test_get_real_amount_wrong_amount(default_conf_usdt, trades_for_order, buy_order_fee, fee,
