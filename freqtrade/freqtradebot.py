@@ -1305,6 +1305,8 @@ class FreqtradeBot(LoggingMixin):
         current_rate = self.exchange.get_rate(
             trade.pair, refresh=False, side="sell") if not fill else None
         profit_ratio = trade.calc_profit_ratio(profit_rate)
+        min_ratio = trade.calc_profit_ratio(trade.min_rate)
+        max_ratio = trade.calc_profit_ratio(trade.max_rate)
         gain = "profit" if profit_ratio > 0 else "loss"
 
         msg = {
@@ -1317,6 +1319,10 @@ class FreqtradeBot(LoggingMixin):
             'limit': profit_rate,
             'order_type': order_type,
             'amount': trade.amount,
+            'min_rate': trade.min_rate,
+            'min_ratio': min_ratio,
+            'max_rate': trade.max_rate,
+            'max_ratio': max_ratio,
             'open_rate': trade.open_rate,
             'close_rate': trade.close_rate,
             'current_rate': current_rate,

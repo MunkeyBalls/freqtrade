@@ -44,3 +44,9 @@ questionary==1.10.0
 prompt-toolkit==3.0.22
 # Extensions to datetime library
 python-dateutil==2.8.2
+
+# MQTT
+paho-mqtt
+
+# NFI
+pandas-ta

@@ -342,6 +342,51 @@ class RPC:
             columns = ['ID', 'Amount', 'Price', profitcol]
             return pairtrades_list, columns, fiat_profit_sum, total_amount, total_average_price, total_profit_percentage
 
+    def _rpc_split(self, id: str, number: int) ->  Tuple[List]:
+        trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
+        pairtrade = Trade.get_trades(trade_filter).first() 
+
+        if not pairtrade:
+            raise RPCException(f"Pair not found")        
+       
+        if number is None or number <= 0:
+            number = 2
+        
+        if (pairtrade.stake_amount / number) < 30:
+            raise RPCException(f"Can't split trade, minimal stake amount > 30")
+        
+        pairtrades_list = []
+        for i in range(int(number)):
+            new_trade = Trade(
+                    pair=pairtrade.pair,
+                    stake_amount=pairtrade.stake_amount / number,
+                    amount=pairtrade.amount / number,
+                    is_open=True,
+                    amount_requested=pairtrade.amount_requested / number,
+                    fee_open=pairtrade.fee_open,
+                    fee_open_cost=pairtrade.fee_open_cost / number,
+                    fee_open_currency=pairtrade.fee_open_currency,
+                    fee_close=pairtrade.fee_close,
+                    open_rate=pairtrade.open_rate,
+                    open_date=pairtrade.open_date,
+                    exchange=pairtrade.exchange,
+                    open_order_id=pairtrade.open_order_id,
+                    strategy=pairtrade.strategy,
+                    buy_tag=pairtrade.buy_tag,
+                    timeframe=pairtrade.timeframe,
+                    max_rate=pairtrade.max_rate,
+                    min_rate=pairtrade.min_rate,
+                    hold_pct=pairtrade.hold_pct
+            )
+            #self.update_trade_to_merge(new_trade, pairtrade.open_order_id)
+            Trade.query.session.add(new_trade)
+            Trade.commit()
+            pairtrades_list.append(new_trade.id)
+        
+        pairtrade.delete()
+
+        return pairtrades_list      
+
     def _rpc_merge_average(self, pair: str) -> Tuple[List]:
         trade_filter = (Trade.is_open.is_(True) & (Trade.pair == pair))
         pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()

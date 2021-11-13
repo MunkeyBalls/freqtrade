@@ -123,7 +123,8 @@ class Telegram(RPCHandler):
                                  r'/stopbuy$', r'/reload_config$', r'/show_config$',
                                  r'/logs$', r'/whitelist$', r'/blacklist$', r'/edge$',
                                  r'/forcebuy$', r'/help$', r'/version$', r'/avg$', r'/merge$', 
-                                 r'/hold$']
+                                 r'/split$', r'/hold$']
+
         # Create keys for generation
         valid_keys_print = [k.replace('$', '') for k in valid_keys]
 
@@ -224,6 +225,7 @@ class Telegram(RPCHandler):
             CommandHandler('version', self._version),
             CommandHandler('avg', self._avg),
             CommandHandler('merge', self._merge),
+            CommandHandler('split', self._split),
             CommandHandler('hold', self._update_hold),
         ]
         callbacks = [
@@ -324,6 +326,8 @@ class Telegram(RPCHandler):
                    "*Amount:* `{amount:.8f}`\n"
                    "*Open Rate:* `{open_rate:.8f}`\n"
                    "*Current Rate:* `{current_rate:.8f}`\n"
+                   "*Min Rate:* `{min_rate:.8f} ({min_ratio:.2%})`\n"
+                   "*Max Rate:* `{max_rate:.8f} ({max_ratio:.2%})`\n"
                    "*Close Rate:* `{limit:.8f}`").format(**msg)
 
         return message
@@ -568,6 +572,25 @@ class Telegram(RPCHandler):
                 self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML, reload_able=True, callback_path="update_avg", query=update.callback_query)
         except RPCException as e:
             self._send_msg(str(e))
+
+    @authorized_only
+    def _split(self, update: Update, context: CallbackContext) -> None:
+        id = context.args[0] if context.args and len(context.args) > 0 else None
+
+        if len(context.args) > 1:
+            number = int(context.args[1])
+        else:
+            number = 2
+
+        if not id:
+            self._send_msg("PairId required to split")
+
+        try:
+            if id:
+                trade_id_list = self._rpc._rpc_split(id, number) 
+                self._send_msg(f"Trade {id} has been split in {number} resulting in orders: {trade_id_list}.")           
+        except RPCException as e:
+            self._send_msg(str(e))                    
 
     @authorized_only
     def _merge(self, update: Update, context: CallbackContext) -> None:
@@ -1461,7 +1484,8 @@ class Telegram(RPCHandler):
                    f"{forcebuy_text if self._config.get('forcebuy_enable', False) else ''}"
                    "*/delete <trade_id>:* `Instantly delete the given trade in the database`\n"
                    "*/avg <pair>:* `Shows the averaging down calculation of given pair.`\n"
-                   "*/merge <pair>:* `Merge open trades of given pair.`\n"
+                   "*/merge <pair> :* `Merge open trades of given pair.`\n"
+                    "*/split <id> [<n>]:* `Split open trade in n number of trades. May cause dust.`\n"
                    "*/performance:* `Show performance of each finished trade grouped by pair`\n"
                    "*/daily <n>:* `Shows profit or loss per day, over the last n days`\n"
                    "*/stats:* `Shows Wins / losses by Sell reason as well as "
