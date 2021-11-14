@@ -29,7 +29,6 @@ from freqtrade.misc import chunks, plural, round_coin_value
 from freqtrade.persistence import Trade
 from freqtrade.rpc import RPC, RPCException, RPCHandler
 
-import paho.mqtt.client as mqtt
 from timeit import default_timer as timer
 import time
 
@@ -93,7 +92,6 @@ class Telegram(RPCHandler):
 
         self._updater: Updater
         self._init_keyboard()
-        self._init_mqtt()
         self._init()
 
     def _init_keyboard(self) -> None:
@@ -145,42 +143,6 @@ class Telegram(RPCHandler):
                 logger.info('using custom keyboard from '
                             f'config.json: {self._keyboard}')
 
-    def on_connect(self, client, userdata, flags, rc):
-        logger.info("Connected to MQTT broker")
-        client.connected_flag=True
-
-    def on_disconnect(self, client, userdata, rc):
-        logger.warning("Disconnected from MQTT broker")
-        client.connected_flag=False
-
-    def _init_mqtt(self) -> None:
-        try:
-            if self._config.get('mqtt', {}).get('enabled', False):
-                logger.info("Connecting to MQTT broker")
-                hostname = self._config["mqtt"]["ip"]
-                port = self._config["mqtt"]["port"]                
-                self.mqttc = mqtt.Client(self._config["bot_name"] + str(time.time()))
-                if self._config.get('mqtt', {}).get('username', False):
-                    self.mqttc.username_pw_set(self._config["mqtt"]["username"], self._config["mqtt"]["password"])
-                self.mqttc.connected_flag = False
-                self.mqttc.on_connect=self.on_connect
-                self.mqttc.on_disconnect=self.on_disconnect
-                self.mqttc.connect(hostname, port)
-                self.mqttc.loop_start()          
-        except Exception as e: 
-            logger.warning("Unable to connect to MQTT broker")
-            logger.warning("MQTT Exception: %s", str(e))
-
-    def _send_mqtt(self, topic: str, msg: str):
-        if self._config.get('mqtt', {}).get('enabled', False):
-            if self.mqttc.connected_flag == True:
-                try:
-                    combined_topic = self._config["mqtt"]["topic"] + "/" + topic
-                    self.mqttc.publish(combined_topic, msg)
-                except:
-                    logger.warning("Unable to publish MQTT msg")
-            else:
-                logger.warning("MQTT not connected")
 
     def _init(self) -> None:
         """
@@ -336,8 +298,6 @@ class Telegram(RPCHandler):
 
         if msg_type == RPCMessageType.BUY:
             message = self._format_buy_msg(msg)
-            self._send_mqtt(str(msg_type), msg['pair'])
-
         elif msg_type in (RPCMessageType.BUY_CANCEL, RPCMessageType.SELL_CANCEL):
             msg['message_side'] = 'buy' if msg_type == RPCMessageType.BUY_CANCEL else 'sell'
             message = ("\N{WARNING SIGN} *{exchange}:* "
@@ -345,7 +305,6 @@ class Telegram(RPCHandler):
                        "Reason: {reason}.".format(**msg))
 
         elif msg_type == RPCMessageType.BUY_FILL:
-            self._send_mqtt(str(msg_type), msg['pair'])
             message = ("\N{LARGE CIRCLE} *{exchange}:* "
                        "Buy order for {pair} (#{trade_id}) filled "
                        "for {open_rate}.".format(**msg))
@@ -354,7 +313,6 @@ class Telegram(RPCHandler):
                        "Sell order for {pair} (#{trade_id}) filled "
                        "for {close_rate}.".format(**msg))
         elif msg_type == RPCMessageType.SELL:
-            self._send_mqtt(str(msg_type), msg['pair'])
             message = self._format_sell_msg(msg)
         elif msg_type == RPCMessageType.PROTECTION_TRIGGER:
             message = (
@@ -405,7 +363,6 @@ class Telegram(RPCHandler):
 
         message = self.compose_message(msg, msg_type)
 
-        #self._send_mqtt(str(msg_type), msg)
         self._send_msg(message, disable_notification=(noti == 'silent'))
 
     def _get_sell_emoji(self, msg):

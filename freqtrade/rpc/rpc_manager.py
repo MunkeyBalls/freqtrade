@@ -27,6 +27,12 @@ class RPCManager:
             from freqtrade.rpc.telegram import Telegram
             self.registered_modules.append(Telegram(self._rpc, config))
 
+        # Enable MQTT
+        if config.get('mqtt', {}).get('enabled', False):
+            logger.info('Enabling rpc.mqtt ...')
+            from freqtrade.rpc.mqtt import Mqtt
+            self.registered_modules.append(Mqtt(self._rpc, config))            
+
         # Enable Webhook
         if config.get('webhook', {}).get('enabled', False):
             logger.info('Enabling rpc.webhook ...')
