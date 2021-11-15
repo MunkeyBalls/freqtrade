@@ -205,7 +205,7 @@ class Telegram(RPCHandler):
                                  pattern='update_sell_reason_performance'),
             CallbackQueryHandler(self._mix_tag_performance, pattern='update_mix_tag_performance'),
             CallbackQueryHandler(self._count, pattern='update_count'),
-            CallbackQueryHandler(self._update_trail, pattern='update_update_hold'),
+            CallbackQueryHandler(self._update_hold, pattern='update_update_hold'),
             CallbackQueryHandler(self._update_trail, pattern='update_update_trail'),
             CallbackQueryHandler(self._forcebuy_inline)
         ]
@@ -615,13 +615,10 @@ class Telegram(RPCHandler):
     def _update_hold(self, update: Update, context: CallbackContext) -> None:
         id = context.args[0] if context.args and len(context.args) > 0 else None
 
-        if len(context.args) > 1:
+        if context.args and len(context.args) > 1:
             pct = float(context.args[1]) / 100
         else:
             pct = 0.001
-
-        if not id:
-            self._send_msg("PairId required to add to hold")
 
         try:
             if id:
