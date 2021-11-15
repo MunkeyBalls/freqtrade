@@ -609,6 +609,16 @@ class FreqtradeBot(LoggingMixin):
         
         Trade.commit()
 
+    def update_trail(self, id: str, pct: float) -> bool:
+        trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
+        pairtrade = Trade.get_trades(trade_filter).order_by(Trade.id).first()        
+        if not pairtrade:
+            return False
+
+        pairtrade.trail_pct =  pct if pct else 0.0
+        
+        Trade.commit()        
+
     def merge_average_trade(self, pair: str) -> bool:
         trade_filter = (Trade.is_open.is_(True) & (Trade.pair == pair))
         pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()

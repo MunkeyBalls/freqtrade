@@ -376,7 +376,8 @@ class RPC:
                     timeframe=pairtrade.timeframe,
                     max_rate=pairtrade.max_rate,
                     min_rate=pairtrade.min_rate,
-                    hold_pct=pairtrade.hold_pct
+                    hold_pct=pairtrade.hold_pct,
+                    trail_pct=pairtrade.trail_pct
             )
             #self.update_trade_to_merge(new_trade, pairtrade.open_order_id)
             Trade.query.session.add(new_trade)
@@ -403,6 +404,21 @@ class RPC:
             self._freqtrade.merge_average_trade(pair)
             return pairtrades_list
 
+    def _rpc_update_trail(self, id: str, pct: float) -> Tuple[str, float]:
+        trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
+        trade = Trade.get_trades(trade_filter).first() 
+
+        if not trade:
+            logger.warning('update_trail: Invalid id argument received')
+            raise RPCException(f"Pair not found")
+        if pct <= -1:
+            logger.warning('update_trail: Invalid percentage argument received')
+            raise RPCException(f"Trail percentage needs to be greater than -100%")
+        else:
+            self._freqtrade.update_trail(id, pct)
+    
+        return [trade.id, pct]            
+
     def _rpc_update_hold(self, id: str, pct: float) -> Tuple[str, float]:
         trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
         trade = Trade.get_trades(trade_filter).first() 
@@ -417,6 +433,40 @@ class RPC:
             self._freqtrade.update_hold(id, pct)
     
         return [trade.id, pct]
+
+    def _rpc_status_trail(self) -> Tuple[List, List, float]:
+    
+        trades = Trade.get_open_trades()
+        if not trades:
+            raise RPCException('no active trade')
+        else:
+            trades_list = []
+            for trade in trades:
+                # calculate profit and send message to user
+                try:
+                    current_rate = self._freqtrade.exchange.get_rate(
+                        trade.pair, refresh=False, side="sell")
+                except (PricingError, ExchangeError):
+                    current_rate = NAN
+                trade_percent = (100 * trade.calc_profit_ratio(current_rate))
+                profit_str = f'{trade_percent:.2f}%'
+                trail_pct = 100 * trade.trail_pct
+                trail_pct_str = f'{trail_pct:.2f}%'
+                stop_loss_pct = 100 * trade.stop_loss_pct
+                stop_loss_pct_str = f'{stop_loss_pct:.2f}%'
+                
+                trades_list.append([
+                    trade.id,
+                    trade.pair + ('*' if (trade.open_order_id is not None
+                                          and trade.close_rate_requested is None) else '')
+                               + ('**' if (trade.close_rate_requested is not None) else ''),
+                    trail_pct_str,
+                    stop_loss_pct_str,
+                    profit_str                    
+                ])
+
+            columns = ['ID', 'Pair', "Trail", "Curr.", "Profit"]
+            return trades_list, columns        
 
     def _rpc_status_hold(self) -> Tuple[List, List, float]:
 

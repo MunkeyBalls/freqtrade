@@ -189,6 +189,7 @@ class Telegram(RPCHandler):
             CommandHandler('merge', self._merge),
             CommandHandler('split', self._split),
             CommandHandler('hold', self._update_hold),
+            CommandHandler('trail', self._update_trail),
         ]
         callbacks = [
             CallbackQueryHandler(self._status_table, pattern='update_status_table'),
@@ -204,7 +205,9 @@ class Telegram(RPCHandler):
                                  pattern='update_sell_reason_performance'),
             CallbackQueryHandler(self._mix_tag_performance, pattern='update_mix_tag_performance'),
             CallbackQueryHandler(self._count, pattern='update_count'),
-            CallbackQueryHandler(self._forcebuy_inline),
+            CallbackQueryHandler(self._update_trail, pattern='update_update_hold'),
+            CallbackQueryHandler(self._update_trail, pattern='update_update_trail'),
+            CallbackQueryHandler(self._forcebuy_inline)
         ]
         for handle in handles:
             self._updater.dispatcher.add_handler(handle)
@@ -575,6 +578,40 @@ class Telegram(RPCHandler):
             self._send_msg(str(e))
 
     @authorized_only
+    def _update_trail(self, update: Update, context: CallbackContext) -> None:
+        try:
+            if context.args:
+                id = context.args[0] if context.args and len(context.args) > 0 else None
+                if len(context.args) > 1:
+                    pct = float(context.args[1]) / 100
+                else:
+                    pct = 0.0
+            else:
+                id = None
+                pct = None
+
+            if id:
+                self._rpc._rpc_update_trail(id, pct)
+                if pct != 0:
+                    self._send_msg(f"Set trade {id} to trail from {pct * 100}%")
+                else:
+                    self._send_msg(f"Disabled trailing on {id}")
+
+            # TODO: Put in it's own method
+            statlist, head = self._rpc._rpc_status_trail()        
+            max_trades_per_msg = 50
+            messages_count = max(int(len(statlist) / max_trades_per_msg + 0.99), 1)
+            for i in range(0, messages_count):
+                trades = statlist[i * max_trades_per_msg:(i + 1) * max_trades_per_msg]
+                message = tabulate(trades,
+                                headers=head,
+                                tablefmt='simple')               
+                self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML, reload_able=True, 
+                callback_path="update_update_trail", query=update.callback_query)
+        except RPCException as e:
+            self._send_msg(str(e))
+
+    @authorized_only
     def _update_hold(self, update: Update, context: CallbackContext) -> None:
         id = context.args[0] if context.args and len(context.args) > 0 else None
 
@@ -603,7 +640,8 @@ class Telegram(RPCHandler):
                 message = tabulate(trades,
                                 headers=head,
                                 tablefmt='simple')               
-                self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML)
+                self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML, reload_able=True, 
+                    callback_path="update_update_hold", query=update.callback_query)
         except RPCException as e:
             self._send_msg(str(e))
 
@@ -1494,6 +1532,7 @@ class Telegram(RPCHandler):
             "*/split <id> [<n>]:* `Split open trade in n number of trades. May cause dust.`\n"
             "*/add_lock <trade_id> [<minutes>]:* `Add a pair lock`\n"
             "*/hold <id> [<percentage>]:* `Hold a pair until profit percentage is met`\n"
+            "*/trail <id> [<percentage>]:* `Start trailing (0.5%) on a trade after profit percentage is met`\n"
             )
 
         self._send_msg(message, parse_mode=ParseMode.MARKDOWN)

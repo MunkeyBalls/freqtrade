@@ -747,10 +747,20 @@ class IStrategy(ABC, HyperStrategyMixin):
                                                       current_profit=current_profit)
             # Sanity check - error cases will return None
             if stop_loss_value:
-                # logger.info(f"{trade.pair} {stop_loss_value=} {current_profit=}")
+                # logger.info(f"{trade.pair} {current_rate} {stop_loss_value=} {current_profit=} {trade.trail_pct}")
                 trade.adjust_stop_loss(current_rate, stop_loss_value)
             else:
                 logger.warning("CustomStoploss function did not return valid stoploss")
+
+        if trade.trail_pct != 0.0: 
+            if current_profit >= trade.trail_pct:
+                #logger.info(f"Trailing: {trade.pair} {stop_loss_value=} {current_profit=} trail_pct={trade.trail_pct} ")
+                stop_loss_value = -0.005 # TODO: Method for linear stoploss, only if > 
+                # Sanity check - error cases will return None
+                if stop_loss_value:
+                    trade.adjust_stop_loss(current_rate, stop_loss_value)
+                else:
+                    logger.warning("Trail percentage function did not return valid stoploss")                        
 
         if self.trailing_stop and trade.stop_loss < (low or current_rate):
             # trailing stoploss handling

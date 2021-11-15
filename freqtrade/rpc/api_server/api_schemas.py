@@ -220,6 +220,7 @@ class TradeSchema(BaseModel):
     max_rate: Optional[float]
     open_order_id: Optional[str]
     hold_pct: Optional[float]
+    trail_pct: Optional[float]
 
 
 class OpenTradeSchema(TradeSchema):
@@ -273,7 +274,11 @@ class AddLockRequest(BaseModel):
 
 class HoldRequest(BaseModel):
     id: str
-    pct: Optional[float] 
+    pct: Optional[float]
+
+class TrailRequest(BaseModel):
+    id: str
+    pct: Optional[float]     
 
 class Logs(BaseModel):
     log_count: int

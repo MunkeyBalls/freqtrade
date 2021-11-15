@@ -18,7 +18,7 @@ from freqtrade.rpc.api_server.api_schemas import (AddLockRequest, AvailablePairs
                                                   OpenTradeSchema, PairHistory, PerformanceEntry,
                                                   Ping, PlotConfig, Profit, ResultMsg, ShowConfig,
                                                   Stats, StatusMsg, StrategyListResponse,
-                                                  StrategyResponse, SysInfo, Version,
+                                                  StrategyResponse, SysInfo, TrailRequest, Version,
                                                   WhitelistResponse)
 from freqtrade.rpc.api_server.deps import get_config, get_rpc, get_rpc_optional
 from freqtrade.rpc.rpc import RPCException
@@ -168,6 +168,15 @@ def add_lock(payload: AddLockRequest, rpc: RPC = Depends(get_rpc)):
 @router.post('/locks/delete', response_model=Locks, tags=['info', 'locks'])
 def delete_lock_pair(payload: DeleteLockRequest, rpc: RPC = Depends(get_rpc)):
     return rpc._rpc_delete_lock(lockid=payload.lockid, pair=payload.pair)
+
+@router.post('/trail', response_model=OpenTradeSchema, tags=['trading'])
+def trail(payload: TrailRequest, rpc: RPC = Depends(get_rpc)):    
+    try:
+        rpc._rpc_update_trail(id=payload.id, pct=payload.pct)
+        return rpc._rpc_trade_status([payload.id])[0]
+    except (RPCException, KeyError):
+        raise HTTPException(status_code=404, detail='Trade not found.')
+
 
 @router.post('/hold', response_model=OpenTradeSchema, tags=['trading'])
 def hold(payload: HoldRequest, rpc: RPC = Depends(get_rpc)):    
