@@ -590,7 +590,7 @@ class Telegram(RPCHandler):
                 id = None
                 pct = None
 
-            if id:
+            if id and pct:
                 self._rpc._rpc_update_trail(id, pct)
                 if pct != 0:
                     self._send_msg(f"Set trade {id} to trail from {pct * 100}%")

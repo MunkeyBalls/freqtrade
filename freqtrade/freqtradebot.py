@@ -615,7 +615,7 @@ class FreqtradeBot(LoggingMixin):
         if not pairtrade:
             return False
 
-        pairtrade.trail_pct =  pct if pct else 0.0
+        pairtrade.trail_pct = pct if pct else 0.0
         
         Trade.commit()        
 
