@@ -297,11 +297,11 @@ class Telegram(RPCHandler):
             f"*Buy Tag:* `{msg['buy_tag']}`\n"
             f"*Sell Reason:* `{msg['sell_reason']}`\n"
             f"*Duration:* `{msg['duration']} ({msg['duration_min']:.1f} min)`\n"
-            f"*Amount:* `{msg['amount']:.8f}`\n")
+            f"*Amount:* `{msg['amount']:.8f}`\n"
+            f"*Open Rate:* `{msg['open_rate']:.8f}`\n")
 
         if msg['type'] == RPCMessageType.SELL:
-            message += (f"*Open Rate:* `{msg['open_rate']:.8f}`\n"
-                        f"*Current Rate:* `{msg['current_rate']:.8f}`\n"
+            message += (f"*Current Rate:* `{msg['current_rate']:.8f}`\n"
                         f"*Min Rate:* `{msg['min_rate']:.8f} ({msg['min_ratio']:.2f}%)`\n"
                         f"*Max Rate:* `{msg['max_rate']:.8f} ({msg['max_ratio']:.2f}%)`\n"
                         f"*Close Rate:* `{msg['limit']:.8f}`")
