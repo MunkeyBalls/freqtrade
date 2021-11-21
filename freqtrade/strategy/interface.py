@@ -754,8 +754,8 @@ class IStrategy(ABC, HyperStrategyMixin):
 
         if trade.trail_pct != 0.0: 
             if current_profit >= trade.trail_pct:
-                #logger.info(f"Trailing: {trade.pair} {stop_loss_value=} {current_profit=} trail_pct={trade.trail_pct} ")
-                stop_loss_value = -0.005 # TODO: Method for linear stoploss, only if > 
+                stop_loss_value = self.config.get('trade_trailing_pct', 0.005) * -1 # TODO: Method for linear stoploss, only if >
+                #logger.info(f"Trailing: {trade.pair} {stop_loss_value=} {current_profit=} trail_pct={trade.trail_pct}") 
                 # Sanity check - error cases will return None
                 if stop_loss_value:
                     trade.adjust_stop_loss(current_rate, stop_loss_value)
