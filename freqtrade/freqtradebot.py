@@ -514,7 +514,7 @@ class FreqtradeBot(LoggingMixin):
         if forcebuy:
             # Forcebuy can define a different ordertype
             order_type = self.strategy.order_types.get('forcebuy', order_type)
-            hold_pct = 0.01
+            hold_pct = self.config.get('forcebuy_hold_pct', 0.01)
         else:
             hold_pct = 0.0            
 

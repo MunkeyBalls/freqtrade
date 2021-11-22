@@ -142,6 +142,7 @@ CONF_SCHEMA = {
         'trailing_stop_positive_offset': {'type': 'number', 'minimum': 0, 'maximum': 1},
         'trailing_only_offset_is_reached': {'type': 'boolean'},
         'trade_trailing_pct': {'type': 'number', 'minimum': 0, 'maximum': 0.9},
+        'forcebuy_hold_pct': {'type': 'number', 'minimum': 0, 'maximum': 0.9}, 
         'use_sell_signal': {'type': 'boolean'},
         'sell_profit_only': {'type': 'boolean'},
         'sell_profit_offset': {'type': 'number'},
