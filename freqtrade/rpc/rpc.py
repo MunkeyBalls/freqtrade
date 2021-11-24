@@ -452,7 +452,12 @@ class RPC:
                 profit_str = f'{trade_percent:.2f}%'
                 trail_pct = 100 * trade.trail_pct
                 trail_pct_str = f'{trail_pct:.2f}%'
-                stop_loss_pct = 100 * trade.stop_loss_pct
+
+                if trade.open_order_id is not None:
+                    stop_loss_pct = 0
+                else:
+                    stop_loss_pct = 100 * trade.stop_loss_pct
+
                 stop_loss_pct_str = f'{stop_loss_pct:.2f}%'
                 
                 trades_list.append([
