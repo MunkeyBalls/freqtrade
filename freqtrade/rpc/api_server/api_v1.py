@@ -206,6 +206,9 @@ def stop(rpc: RPC = Depends(get_rpc)):
 def stop_buy(rpc: RPC = Depends(get_rpc)):
     return rpc._rpc_stopbuy()
 
+@router.post('/max_trades', response_model=ResultMsg, tags=['botcontrol'])
+def max_slots(slots: int, rpc: RPC = Depends(get_rpc)):
+    return rpc._rpc_max_open_trades(slots)
 
 @router.post('/reload_config', response_model=StatusMsg, tags=['botcontrol'])
 def reload_config(rpc: RPC = Depends(get_rpc)):

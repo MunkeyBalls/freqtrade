@@ -453,7 +453,7 @@ class RPC:
                 trail_pct = 100 * trade.trail_pct
                 trail_pct_str = f'{trail_pct:.2f}%'
 
-                if trade.open_order_id is not None:
+                if trade.stop_loss_pct is not None:
                     stop_loss_pct = 0
                 else:
                     stop_loss_pct = 100 * trade.stop_loss_pct
@@ -893,6 +893,19 @@ class RPC:
             self._freqtrade.config['max_open_trades'] = 0
 
         return {'status': 'No more buy will occur from now. Run /reload_config to reset.'}
+        
+    def _rpc_max_open_trades(self, slots: int) -> Dict[str, str]:
+        """
+        Set max open trades
+        """
+        if slots is None or not (isinstance(slots, int) or slots <= 0):
+            raise RPCException('Amount of trades should be 0 or more')
+            
+        if self._freqtrade.state != State.RUNNING:
+            raise RPCException('Trader is not running')
+
+        self._freqtrade.config['max_open_trades'] = int(slots)
+        return {'result': f'Set amount of slots to {slots}.'}
 
     def _rpc_forcesell(self, trade_id: str) -> Dict[str, str]:
         """

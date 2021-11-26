@@ -121,7 +121,7 @@ class Telegram(RPCHandler):
                                  r'/stopbuy$', r'/reload_config$', r'/show_config$',
                                  r'/logs$', r'/whitelist$', r'/blacklist$', r'/edge$',
                                  r'/forcebuy$', r'/help$', r'/version$', r'/avg$', r'/merge$', 
-                                 r'/split$', r'/hold$']
+                                 r'/split$', r'/hold$', r'/max_trades$']
 
         # Create keys for generation
         valid_keys_print = [k.replace('$', '') for k in valid_keys]
@@ -190,6 +190,7 @@ class Telegram(RPCHandler):
             CommandHandler('split', self._split),
             CommandHandler('hold', self._update_hold),
             CommandHandler('trail', self._update_trail),
+            CommandHandler('max_trades', self._max_trades),
         ]
         callbacks = [
             CallbackQueryHandler(self._status_table, pattern='update_status_table'),
@@ -993,6 +994,27 @@ class Telegram(RPCHandler):
         """
         msg = self._rpc._rpc_stopbuy()
         self._send_msg('Status: `{status}`'.format(**msg))
+
+    @authorized_only
+    def _max_trades(self, update: Update, context: CallbackContext) -> None:
+        """
+        Handler for /max_trades <id>.
+        Set max number of trades
+        :param bot: telegram bot
+        :param update: message update
+        :return: None
+        """ 
+        try:
+            max_trades = int(context.args[0]) if context.args else None
+        except (TypeError, ValueError, IndexError):
+            self._send_msg("You must specify a maximum number of trades")
+            return
+  
+        try:
+            msg = self._rpc._rpc_max_open_trades(max_trades)
+            self._send_msg(msg["result"])
+        except RPCException as e:
+            self._send_msg(str(e))            
 
     @authorized_only
     def _forcesell(self, update: Update, context: CallbackContext) -> None:
