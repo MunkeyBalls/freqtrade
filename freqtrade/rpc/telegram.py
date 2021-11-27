@@ -1552,6 +1552,7 @@ class Telegram(RPCHandler):
             "*/add_lock <trade_id> [<minutes>]:* `Add a pair lock`\n"
             "*/hold <id> [<percentage>]:* `Hold a pair until profit percentage is met`\n"
             "*/trail <id> [<percentage>]:* `Start trailing (0.5%) on a trade after profit percentage is met`\n"
+            "*/max_trades <n> :* `Set max number of trades`\n"
             )
 
         self._send_msg(message, parse_mode=ParseMode.MARKDOWN)
