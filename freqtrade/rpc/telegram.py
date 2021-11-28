@@ -191,6 +191,7 @@ class Telegram(RPCHandler):
             CommandHandler('hold', self._update_hold),
             CommandHandler('trail', self._update_trail),
             CommandHandler('max_trades', self._max_trades),
+            CommandHandler('reset_trade', self._reset_trade),
         ]
         callbacks = [
             CallbackQueryHandler(self._status_table, pattern='update_status_table'),
@@ -347,6 +348,15 @@ class Telegram(RPCHandler):
 
         elif msg_type == RPCMessageType.STARTUP:
             message = '{status}'.format(**msg)
+        
+        elif msg_type == RPCMessageType.SELL_HOLD:            
+            msg['current_profit_ratio'] = round(msg['current_profit_ratio'] * 100, 2)
+            message = '\N{WARNING SIGN} *Sell hold:* `{pair}` for reason {sell_reason} at rate {rate} ({current_profit_ratio:.2f}%)'.format(**msg)
+            
+        elif msg_type == RPCMessageType.BUY_CANCEL_STRATEGY :
+                        message = ("\N{WARNING SIGN} *{exchange}:* "
+                       "Strategy canceled buy order for {pair} (#{trade_id}). "
+                       "Reason: {reason}.".format(**msg))            
 
         else:
             raise NotImplementedError('Unknown message type: {}'.format(msg_type))
@@ -1018,6 +1028,27 @@ class Telegram(RPCHandler):
             self._send_msg(str(e))            
 
     @authorized_only
+    def _reset_trade(self, update: Update, context: CallbackContext) -> None:
+        """
+        Handler for /reset_trade <id>.
+        Resets some details of the trade
+        :param bot: telegram bot
+        :param update: message update
+        :return: None
+        """
+        trade_id = context.args[0] if context.args and len(context.args) > 0 else None
+        if not trade_id:
+            self._send_msg("You must specify a trade-id or 'all'.")
+            return
+        try:
+            msg = self._rpc._rpc_reset_trade(trade_id)
+            self._send_msg('Reset trade result: `{result}`'.format(**msg))
+
+        except RPCException as e:
+            self._send_msg(str(e))
+            
+
+    @authorized_only
     def _forcesell(self, update: Update, context: CallbackContext) -> None:
         """
         Handler for /forcesell <id>.
@@ -1549,7 +1580,8 @@ class Telegram(RPCHandler):
             "------------\n"
             "*/avg <pair>:* `Shows the averaging down calculation of given pair.`\n"
             "*/merge <pair> :* `Merge open trades of given pair.`\n"
-            "*/split <id> [<n>]:* `Split open trade in n number of trades. May cause dust.`\n"
+            "*/split <trade_id> [<n>]:* `Split open trade in n number of trades. May cause dust.`\n"
+            "*/reset_trade <trade_id>|all:* `Reset open_date, min and max_rate and stoploss for the given trade or all trades"      
             "*/add_lock <trade_id> [<minutes>]:* `Add a pair lock`\n"
             "*/hold <id> [<percentage>]:* `Hold a pair until profit percentage is met`\n"
             "*/trail <id> [<percentage>]:* `Start trailing (0.5%) on a trade after profit percentage is met`\n"

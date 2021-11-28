@@ -894,6 +894,27 @@ class RPC:
             self._freqtrade.config['max_open_trades'] = 0
 
         return {'status': 'No more buy will occur from now. Run /reload_config to reset.'}
+
+    def _rpc_reset_trade(self, trade_id: str) -> Dict[str, str]:
+        if trade_id == 'all':
+                # Execute sell for all open orders
+                for trade in Trade.get_open_trades():
+                    trade.reset_trade()
+                Trade.commit()
+                return {'result': 'All trades reset.'}
+
+        # Query for trade
+        trade = Trade.get_trades(
+            trade_filter=[Trade.id == trade_id, Trade.is_open.is_(True), ]
+        ).first()
+        if not trade:
+            logger.warning('reset_trade: Invalid argument received')
+            raise RPCException('invalid argument')
+
+        trade.reset_trade()
+        Trade.commit()
+        return {'result': f'Trade {trade_id} reset.'}
+
         
     def _rpc_max_open_trades(self, slots: int) -> Dict[str, str]:
         """
