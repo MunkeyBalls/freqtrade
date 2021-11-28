@@ -120,9 +120,12 @@ class Telegram(RPCHandler):
                                  r'/stats$', r'/count$', r'/locks$', r'/add_lock$', r'/balance$',
                                  r'/stopbuy$', r'/reload_config$', r'/show_config$',
                                  r'/logs$', r'/whitelist$', r'/blacklist$', r'/edge$',
-                                 r'/forcebuy$', r'/help$', r'/version$', r'/avg$', r'/merge$', 
-                                 r'/split$', r'/hold$', r'/max_trades$']
-
+                                 r'/forcebuy$', r'/help$', r'/version$',
+                                 r'/avg$', r'/merge$', r'/split$', 
+                                 r'/hold$', r'/max_trades$',
+                                 r'/weekly$', r'/weekly \d+$', r'/monthly$', r'/monthly \d+$',
+                                 r'/forcebuy$', r'/help$', r'/version$']
+                                 
         # Create keys for generation
         valid_keys_print = [k.replace('$', '') for k in valid_keys]
 
@@ -1069,15 +1072,9 @@ class Telegram(RPCHandler):
         except RPCException as e:
             self._send_msg(str(e))
 
-    # def _forcebuy_action(self, pair, price=None):
-    #     try:
-    #         self._rpc._rpc_forcebuy(pair, price)
-    #     except RPCException as e:
-    #         self._send_msg(str(e))
-
     def _forcebuy_action(self, pair, price=None, custom_stake_amount=None):
         try:
-            self._rpc._rpc_forcebuy(pair, price, custom_stake_amount)
+            self._rpc._rpc_forcebuy(pair=pair, price=price, custom_stake_amount=custom_stake_amount)
         except RPCException as e:
             self._send_msg(str(e))
 
