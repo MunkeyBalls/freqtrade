@@ -50,6 +50,7 @@ USERPATH_STRATEGIES = 'strategies'
 USERPATH_NOTEBOOKS = 'notebooks'
 
 TELEGRAM_SETTING_OPTIONS = ['on', 'off', 'silent']
+MQTT_SETTING_OPTIONS = ['on', 'off']
 ENV_VAR_PREFIX = 'FREQTRADE__'
 
 NON_OPEN_EXCHANGE_STATES = ('cancelled', 'canceled', 'closed', 'expired')
@@ -142,7 +143,8 @@ CONF_SCHEMA = {
         'trailing_stop_positive_offset': {'type': 'number', 'minimum': 0, 'maximum': 1},
         'trailing_only_offset_is_reached': {'type': 'boolean'},
         'trade_trailing_pct': {'type': 'number', 'minimum': 0, 'maximum': 0.9},
-        'forcebuy_hold_pct': {'type': 'number', 'minimum': 0, 'maximum': 0.9}, 
+        'forcebuy_hold_pct': {'type': 'number', 'minimum': 0, 'maximum': 0.9},
+        'limit_buy_safety_pct': {'type': 'number', 'minimum': 0, 'maximum': 0.9, 'default': 0.01},
         'use_sell_signal': {'type': 'boolean'},
         'sell_profit_only': {'type': 'boolean'},
         'sell_profit_offset': {'type': 'number'},
@@ -278,6 +280,11 @@ CONF_SCHEMA = {
                         'startup': {'type': 'string', 'enum': TELEGRAM_SETTING_OPTIONS},
                         'buy': {'type': 'string', 'enum': TELEGRAM_SETTING_OPTIONS},
                         'buy_cancel': {'type': 'string', 'enum': TELEGRAM_SETTING_OPTIONS},
+                        'buy_cancel_strategy': {
+                            'type': 'string',
+                            'enum': TELEGRAM_SETTING_OPTIONS,
+                            'default': 'off'
+                        },
                         'buy_fill': {'type': 'string',
                                      'enum': TELEGRAM_SETTING_OPTIONS,
                                      'default': 'off'
@@ -291,6 +298,11 @@ CONF_SCHEMA = {
                         },
                         'sell_cancel': {'type': 'string', 'enum': TELEGRAM_SETTING_OPTIONS},
                         'sell_fill': {
+                            'type': 'string',
+                            'enum': TELEGRAM_SETTING_OPTIONS,
+                            'default': 'off'
+                        },
+                        'sell_hold': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
                             'default': 'off'
@@ -322,7 +334,54 @@ CONF_SCHEMA = {
                 },
                 'topic': {'type': 'string'},                
                 'user': {'type': 'string'},
-                'password': {'type': 'string'}
+                'password': {'type': 'string'},
+                'notification_settings': {
+                    'type': 'object',
+                    'default': {},
+                    'properties': {
+                        'status': {'type': 'string', 'enum': MQTT_SETTING_OPTIONS},
+                        'warning': {'type': 'string', 'enum': MQTT_SETTING_OPTIONS},
+                        'startup': {'type': 'string', 'enum': MQTT_SETTING_OPTIONS},
+                        'buy': {'type': 'string', 'enum': MQTT_SETTING_OPTIONS},
+                        'buy_cancel': {'type': 'string', 'enum': MQTT_SETTING_OPTIONS},
+                        'buy_cancel_strategy': {
+                            'type': 'string',
+                            'enum': MQTT_SETTING_OPTIONS,
+                            'default': 'off'
+                        },
+                        'buy_fill': {'type': 'string',
+                                     'enum': MQTT_SETTING_OPTIONS,
+                                     'default': 'off'
+                                     },
+                        'sell': {
+                            'type': ['string', 'object'],
+                            'additionalProperties': {
+                                'type': 'string',
+                                'enum': MQTT_SETTING_OPTIONS
+                            }
+                        },
+                        'sell_cancel': {'type': 'string', 'enum': MQTT_SETTING_OPTIONS},
+                        'sell_fill': {
+                            'type': 'string',
+                            'enum': MQTT_SETTING_OPTIONS,
+                            'default': 'off'
+                        },
+                        'sell_hold': {
+                            'type': 'string',
+                            'enum': MQTT_SETTING_OPTIONS,
+                            'default': 'off'
+                        },
+                        # 'protection_trigger': {
+                        #     'type': 'string',
+                        #     'enum': MQTT_SETTING_OPTIONS,
+                        #     'default': 'off'
+                        # },
+                        # 'protection_trigger_global': {
+                        #     'type': 'string',
+                        #     'enum': MQTT_SETTING_OPTIONS,
+                        # },
+                    }
+                },
             },
             'required': ['enabled', 'ip', 'port', 'topic'],
         },

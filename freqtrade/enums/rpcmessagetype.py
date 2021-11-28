@@ -13,6 +13,9 @@ class RPCMessageType(Enum):
     SELL_CANCEL = 'sell_cancel'
     PROTECTION_TRIGGER = 'protection_trigger'
     PROTECTION_TRIGGER_GLOBAL = 'protection_trigger_global'
+    
+    BUY_CANCEL_STRATEGY = 'buy_cancel_strategy'    
+    SELL_HOLD = 'sell_hold'
 
     def __repr__(self):
         return self.value

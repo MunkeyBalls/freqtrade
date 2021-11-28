@@ -453,12 +453,13 @@ class RPC:
                 trail_pct = 100 * trade.trail_pct
                 trail_pct_str = f'{trail_pct:.2f}%'
 
-                if trade.stop_loss_pct is not None:
-                    stop_loss_pct = 0
+                if trade.stop_loss is not None:
+                    stoploss_current_dist = trade.stop_loss - current_rate
+                    stoploss_current_dist_ratio = 100 * (stoploss_current_dist / current_rate)
                 else:
-                    stop_loss_pct = 100 * trade.stop_loss_pct
+                    stoploss_current_dist_ratio = 0
 
-                stop_loss_pct_str = f'{stop_loss_pct:.2f}%'
+                stoploss_current_dist_ratio_str = f'{stoploss_current_dist_ratio:.2f}%'
                 
                 trades_list.append([
                     trade.id,
@@ -466,7 +467,7 @@ class RPC:
                                           and trade.close_rate_requested is None) else '')
                                + ('**' if (trade.close_rate_requested is not None) else ''),
                     trail_pct_str,
-                    stop_loss_pct_str,
+                    stoploss_current_dist_ratio_str,
                     profit_str                    
                 ])
 

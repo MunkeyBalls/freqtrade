@@ -522,6 +522,7 @@ class FreqtradeBot(LoggingMixin):
                 pair=pair, order_type=order_type, amount=amount, rate=enter_limit_requested,
                 time_in_force=time_in_force, current_time=datetime.now(timezone.utc)):
             logger.info(f"User requested abortion of buying {pair}")
+            self._notify_enter_cancel_strategy(pair, buy_tag, enter_limit_requested, order_type, amount)
             return False
         amount = self.exchange.amount_to_precision(pair, amount)
         order = self.exchange.create_order(pair=pair, ordertype=order_type, side="buy",
@@ -739,6 +740,32 @@ class FreqtradeBot(LoggingMixin):
             'amount': trade.amount,
             'open_date': trade.open_date,
             'current_rate': current_rate,
+            'reason': reason,
+        }
+
+        # Send the message
+        self.rpc.send_msg(msg)
+
+    def _notify_enter_cancel_strategy(self, pair: str, buy_tag: str, rate: float, order_type: str, amount: float) -> None:
+        """
+        Sends rpc notification when a buy cancel occurred from the strategy.
+        """       
+        reason = f"Strategy cancelled buy at rate: {rate}"
+
+        msg = {
+            'trade_id': "None",
+            'type': RPCMessageType.BUY_CANCEL_STRATEGY,
+            'buy_tag': buy_tag,
+            'exchange': self.exchange.name.capitalize(),
+            'pair': pair,
+            #'limit': rate,
+            'order_type': order_type,
+            #'stake_amount': trade.stake_amount,
+            'stake_currency': self.config['stake_currency'],
+            'fiat_currency': self.config.get('fiat_display_currency', None),
+            'amount': amount,
+            #'open_date': trade.open_date,
+            'current_rate': rate,
             'reason': reason,
         }
 
@@ -1186,6 +1213,7 @@ class FreqtradeBot(LoggingMixin):
                 current_profit_ratio = trade.calc_profit_ratio(rate)
                 formatted_profit_ratio = f"{trade.hold_pct * 100}%"
                 formatted_current_profit_ratio = f"{current_profit_ratio * 100}%"
+                self._notify_sell_hold(trade, sell_reason.sell_reason, rate, current_profit_ratio)
                 logger.warning(
                         "Checking sell %s because the current profit of %s >= %s",
                         trade, formatted_current_profit_ratio, formatted_profit_ratio
@@ -1304,6 +1332,26 @@ class FreqtradeBot(LoggingMixin):
         self._notify_exit(trade, order_type)
 
         return True
+
+
+    def _notify_sell_hold(self, trade: Trade, sell_reason: str, rate: float, current_profit_ratio: float = False) -> None:
+        """
+        Sends rpc notification when a sell occurred.
+        """              
+        msg = {
+            'type': RPCMessageType.SELL_HOLD,
+            'trade_id': trade.id,
+            'exchange': trade.exchange.capitalize(),
+            'pair': trade.pair,
+            'current_profit_ratio': current_profit_ratio,
+            'rate': rate,
+            'buy_tag': trade.buy_tag,
+            'sell_reason': sell_reason
+        }
+        
+        # Send the message
+        self.rpc.send_msg(msg)
+
 
     def _notify_exit(self, trade: Trade, order_type: str, fill: bool = False) -> None:
         """

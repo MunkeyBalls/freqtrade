@@ -52,10 +52,13 @@ class Mqtt(RPCHandler):
         client.connected_flag=False
 
     def on_message(self, client, userdata, message):
-        #global messages
         logger.warning("Received MQTT: %s on topic: %s", message.payload, message.topic)
+        # results = self._rpc._rpc_trade_status()
+        # s = json.dumps(results)
+        # self._send_mqtt('sensor', s)
+        #self._loop()
         # TODO: Run commands based on topic / payload
-        #m = str(message.payload.decode("utf-8"))
+        # m = str(message.payload.decode("utf-8"))
         # messages.append(m)#put messages in list
         # q.put(m) #put messages on queue
 
@@ -63,6 +66,7 @@ class Mqtt(RPCHandler):
         try:
             if self._config.get('mqtt', {}).get('enabled', False):
                 logger.info("Connecting to MQTT broker")
+                self.bot_name = self._config["bot_name"]
                 hostname = self._config["mqtt"]["ip"]
                 port = self._config["mqtt"]["port"]                
                 self.mqttc = mqtt.Client(self._config["bot_name"] + str(time.time()))
@@ -81,7 +85,7 @@ class Mqtt(RPCHandler):
             logger.warning("Unable to connect to MQTT broker")
             logger.warning("MQTT Exception: %s", str(e))
 
-    def _send_mqtt(self, topic: str, msg: str):        
+    def _send_mqtt(self, topic: str, msg: str):
         if self.mqttc != None and self.mqttc.connected_flag == True:
             try:
                 combined_topic = self._config["mqtt"]["topic"] + "/" + topic
@@ -104,36 +108,125 @@ class Mqtt(RPCHandler):
 
     def send_msg(self, msg: Dict[str, Any]) -> None:
         """ Send a message to MQTT topic  """
+        if self.mqttc != None and self.mqttc.connected_flag == True:
+            message = self.compose_message(msg, msg['type'])
+            if message:
+                self._send_mqtt(msg['type'], message)      
 
-        msg_type = msg['type']       
 
-        # TODO: Compose json message based on type with relevant info
-        #message = self.compose_message(msg, msg_type)
+    def compose_message(self, msg: Dict[str, Any], msg_type: RPCMessageType) -> str:
+        if msg_type in [RPCMessageType.BUY, RPCMessageType.BUY_FILL]:
+            message = self._format_buy_msg(msg)
 
-        if msg_type == RPCMessageType.BUY:            
-            self._send_mqtt(str(msg_type), msg['pair'])
-        elif msg_type == RPCMessageType.BUY_FILL:            
-            self._send_mqtt(str(msg_type), msg['pair'])
-
-        elif msg_type == RPCMessageType.SELL:
-            self._send_mqtt(str(msg_type), msg['pair'])
-        elif msg_type == RPCMessageType.SELL_FILL:
-            self._send_mqtt(str(msg_type), msg['pair'])
+        elif msg_type in [RPCMessageType.SELL, RPCMessageType.SELL_FILL]:
+            message = self._format_sell_msg(msg)
 
         elif msg_type in (RPCMessageType.BUY_CANCEL, RPCMessageType.SELL_CANCEL):
-            self._send_mqtt(str(msg_type), msg['pair'])
+            msg['message_side'] = 'buy' if msg_type == RPCMessageType.BUY_CANCEL else 'sell'
+            msg['type'] = 'buy_cancel' if msg_type == RPCMessageType.BUY_CANCEL else 'sell_cancel'
+            message = ("\N{WARNING SIGN} *{exchange}:* "
+                       "Cancelling open {message_side} Order for {pair} (#{trade_id}). "
+                       "Reason: {reason}.".format(**msg))
 
+        elif msg_type == RPCMessageType.BUY_CANCEL_STRATEGY:
+            msg['type'] = 'buy_cancel_strategy'
+            msg['message_side'] = 'buy'
+            message = ("\N{WARNING SIGN} *{exchange}:* "
+                       "Cancelling open {message_side} Order for {pair} (#{trade_id}). "
+                       "Reason: {reason}.".format(**msg))
 
-    def _send_msg(self, msg: str) -> None:
-        """
-        Send given markdown message
-        :param msg: message
-        :param bot: alternative bot
-        :param parse_mode: telegram parse mode
-        :return: None
-        """
+        elif msg_type in [RPCMessageType.SELL_HOLD]:
+            message = self._format_sell_hold_msg(msg)
+
+        else:
+            return None
+        return message 
+
 
     def _autodiscover(self):
-        bot_name = self._config["bot_name"]
         topic = "homeassistant" # TODO: Autodiscovery port
         self.mqttc.publish(topic, '')
+
+    def _format_trade_status_msg(self):
+        results = self._rpc._rpc_trade_status()
+        message = json.dumps(results)        
+        return message
+
+    def _format_buy_msg(self, msg: Dict[str, Any]) -> str:
+        is_fill = msg['type'] == RPCMessageType.BUY_FILL
+        if self._rpc._fiat_converter:
+            msg['stake_amount_fiat'] = self._rpc._fiat_converter.convert_amount(
+            msg['stake_amount'], msg['stake_currency'], msg['fiat_currency'])
+        else:
+            msg['stake_amount_fiat'] = 0
+
+        if is_fill:
+            open_rate = msg['open_rate']
+            type = 'buy_fill'            
+        else:
+            open_rate = msg['limit']
+            type = 'buy'
+
+        msg['type'] = type
+
+        message = {
+            'trade_id': msg['trade_id'],
+            'type': type,
+            'buy_tag': msg['buy_tag'],
+            'exchange': msg['exchange'],
+            'pair': msg['pair'],
+            'open_rate': open_rate,
+            #'curren_rate': open_rate,
+            'stake_amount': msg['stake_amount'],
+            'amount': msg['amount'],
+            'bot_name': self.bot_name
+        }
+
+        return json.dumps(message)
+
+    def _format_sell_msg(self, msg: Dict[str, Any]) -> str:
+        is_fill = msg['type'] == RPCMessageType.SELL_FILL
+        msg['amount'] = round(msg['amount'], 8)
+        msg['profit_percent'] = round(msg['profit_ratio'] * 100, 2)
+        msg['duration'] = msg['close_date'].replace(microsecond=0) - msg['open_date'].replace(microsecond=0)
+        msg['duration_min'] = msg['duration'].total_seconds() / 60
+        msg['buy_tag'] = msg['buy_tag'] if "buy_tag" in msg.keys() else None
+        msg['min_ratio'] = round(msg['min_ratio'] * 100., 2)
+        msg['max_ratio'] = round(msg['max_ratio'] * 100, 2)
+        msg['type'] = 'sell'
+
+        if is_fill:
+            type = 'sell_fill'
+        else:
+            type = 'sell'        
+
+        msg['type'] = type
+
+        mesage = {
+            'type': type,
+            'trade_id': msg['trade_id'],
+            'exchange': msg['exchange'],
+            'pair': msg['pair'],
+            'gain': msg['gain'],
+            'limit': msg['limit'],
+            'order_type': msg['order_type'],
+            'amount': msg['amount'],
+            # 'min_rate': trade.min_rate,
+            # 'min_ratio': min_ratio,
+            # 'max_rate': trade.max_rate,
+            # 'max_ratio': max_ratio,
+            # 'open_rate': trade.open_rate,
+            'close_rate': msg['close_rate'],
+            # 'current_rate': current_rate,
+            'profit_amount': msg['profit_amount'],
+            'profit_ratio': msg['profit_ratio'],
+            'bot_name': self.bot_name
+        }
+
+        return json.dumps(mesage)      
+
+
+    def _format_sell_hold_msg(self, msg: Dict[str, Any]) -> str:
+        msg['type'] = 'sell_hold'
+        msg['bot_name'] = self.bot_name
+        return json.dumps(msg)

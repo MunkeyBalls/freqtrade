@@ -378,7 +378,8 @@ class Telegram(RPCHandler):
 
         message = self.compose_message(msg, msg_type)
 
-        self._send_msg(message, disable_notification=(noti == 'silent'))
+        if message is not None:
+            self._send_msg(message, disable_notification=(noti == 'silent'))
 
     def _get_sell_emoji(self, msg):
         """
