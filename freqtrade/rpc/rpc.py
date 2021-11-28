@@ -1011,6 +1011,18 @@ class RPC:
         else:
             stakeamount = self._freqtrade.wallets.get_trade_stake_amount(pair)
 
+        # Safety check limit price above current rate
+        if price is not None and price != 0:
+            proposed_enter_rate = self._freqtrade.exchange.get_rate(pair, refresh=True, side="buy")
+            try:                
+                diff_pct = ((price - proposed_enter_rate) / proposed_enter_rate) * 100.0
+                allowed_diff_pct = self._freqtrade.config.get('forcebuy_hold_pct', 0.01) * 100
+                if diff_pct > allowed_diff_pct:
+                    diff_pct_str = f'{diff_pct:.2f}%'
+                    raise RPCException(f'Request price {price} is {diff_pct_str} higher than current market price {proposed_enter_rate}. Aborted sell.')
+            except ZeroDivisionError:
+                raise RPCException(f'Division by zero')      
+
         # execute buy
         if self._freqtrade.execute_entry(pair, stakeamount, price, forcebuy=True):
             Trade.commit()
