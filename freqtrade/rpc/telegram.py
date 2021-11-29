@@ -354,12 +354,11 @@ class Telegram(RPCHandler):
         
         elif msg_type == RPCMessageType.SELL_HOLD:            
             msg['current_profit_ratio'] = round(msg['current_profit_ratio'] * 100, 2)
-            message = '\N{WARNING SIGN} *Sell hold:* `{pair}` for reason {sell_reason} at rate {rate} ({current_profit_ratio:.2f}%)'.format(**msg)
+            message = '\N{WARNING SIGN} *Sell hold:* {trade_id} - `{pair}` - `{sell_reason}` at rate {rate} ({current_profit_ratio:.2f}%)'.format(**msg)
             
         elif msg_type == RPCMessageType.BUY_CANCEL_STRATEGY :
                         message = ("\N{WARNING SIGN} *{exchange}:* "
-                       "Strategy canceled buy order for {pair} (#{trade_id}). "
-                       "Reason: {reason}.".format(**msg))            
+                       "Canceled buy order: {pair} (#{trade_id}) - {reason}.".format(**msg))            
 
         else:
             raise NotImplementedError('Unknown message type: {}'.format(msg_type))

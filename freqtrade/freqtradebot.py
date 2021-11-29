@@ -517,7 +517,7 @@ class FreqtradeBot(LoggingMixin):
         else:
             hold_pct = 0.0            
 
-        if buy_tag == 'forcebuy' and not strategy_safe_wrapper(self.strategy.confirm_trade_entry, default_retval=True)(
+        if buy_tag != 'forcebuy' and not strategy_safe_wrapper(self.strategy.confirm_trade_entry, default_retval=True)(
                 pair=pair, order_type=order_type, amount=amount, rate=enter_limit_requested,
                 time_in_force=time_in_force, current_time=datetime.now(timezone.utc)):
             logger.info(f"User requested abortion of buying {pair}")
