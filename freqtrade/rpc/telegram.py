@@ -1577,7 +1577,7 @@ class Telegram(RPCHandler):
             "*/avg <pair>:* `Shows the averaging down calculation of given pair.`\n"
             "*/merge <pair> :* `Merge open trades of given pair.`\n"
             "*/split <trade_id> [<n>]:* `Split open trade in n number of trades. May cause dust.`\n"
-            "*/reset_trade <trade_id>|all:* `Reset open_date, min and max_rate and stoploss for the given trade or all trades"      
+            "*/reset_trade <trade_id>|all:* `Reset open_date, min and max_rate and stoploss for the given trade or all trades`\n"
             "*/add_lock <trade_id> [<minutes>]:* `Add a pair lock`\n"
             "*/hold <id> [<percentage>]:* `Hold a pair until profit percentage is met`\n"
             "*/trail <id> [<percentage>]:* `Start trailing (0.5%) on a trade after profit percentage is met`\n"
