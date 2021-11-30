@@ -367,6 +367,37 @@ class LocalTrade():
         self.max_rate = max(current_price, self.max_rate or self.open_rate)
         self.min_rate = min(current_price_low, self.min_rate or self.open_rate)
 
+    def reset_trade(self)  -> None:
+        """
+        Reset the open_date and min_max_rates
+        """
+        self.reset_open_date()
+        self.reset_min_max_rates()
+        self.reset_stoploss()
+        self.trail_pct = 0
+
+        #self.stoploss_reinitialization(0.99)
+
+    def reset_open_date(self):
+        """
+        Reset the open_date
+        """
+        self.open_date = datetime.utcnow()
+
+    def reset_min_max_rates(self) -> None:
+        """
+        Reset the max_rate and min_rate to open rate.
+        """
+        if self.open_rate is not None:
+            self.max_rate = self.open_rate
+            self.min_rate = self.open_rate
+
+    def reset_stoploss(self):
+        """Assign new stop value"""        
+        stoploss = 0.99
+        new_loss = float(self.open_rate * (1 - abs(stoploss)))
+        self._set_new_stoploss(new_loss, stoploss)              
+
     def _set_new_stoploss(self, new_loss: float, stoploss: float):
         """Assign new stop value"""
         self.stop_loss = new_loss

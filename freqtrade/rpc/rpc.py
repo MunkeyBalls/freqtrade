@@ -453,12 +453,13 @@ class RPC:
                 trail_pct = 100 * trade.trail_pct
                 trail_pct_str = f'{trail_pct:.2f}%'
 
-                if trade.stop_loss_pct is not None:
-                    stop_loss_pct = 0
+                if trade.stop_loss is not None:
+                    stoploss_current_dist = trade.stop_loss - current_rate
+                    stoploss_current_dist_ratio = 100 * (stoploss_current_dist / current_rate)
                 else:
-                    stop_loss_pct = 100 * trade.stop_loss_pct
+                    stoploss_current_dist_ratio = 0
 
-                stop_loss_pct_str = f'{stop_loss_pct:.2f}%'
+                stoploss_current_dist_ratio_str = f'{stoploss_current_dist_ratio:.2f}%'
                 
                 trades_list.append([
                     trade.id,
@@ -466,7 +467,7 @@ class RPC:
                                           and trade.close_rate_requested is None) else '')
                                + ('**' if (trade.close_rate_requested is not None) else ''),
                     trail_pct_str,
-                    stop_loss_pct_str,
+                    stoploss_current_dist_ratio_str,
                     profit_str                    
                 ])
 
@@ -893,6 +894,27 @@ class RPC:
             self._freqtrade.config['max_open_trades'] = 0
 
         return {'status': 'No more buy will occur from now. Run /reload_config to reset.'}
+
+    def _rpc_reset_trade(self, trade_id: str) -> Dict[str, str]:
+        if trade_id == 'all':
+                # Execute sell for all open orders
+                for trade in Trade.get_open_trades():
+                    trade.reset_trade()
+                Trade.commit()
+                return {'result': 'All trades reset.'}
+
+        # Query for trade
+        trade = Trade.get_trades(
+            trade_filter=[Trade.id == trade_id, Trade.is_open.is_(True), ]
+        ).first()
+        if not trade:
+            logger.warning('reset_trade: Invalid argument received')
+            raise RPCException('invalid argument')
+
+        trade.reset_trade()
+        Trade.commit()
+        return {'result': f'Trade {trade_id} reset.'}
+
         
     def _rpc_max_open_trades(self, slots: int) -> Dict[str, str]:
         """
@@ -907,7 +929,7 @@ class RPC:
         self._freqtrade.config['max_open_trades'] = int(slots)
         return {'result': f'Set amount of slots to {slots}.'}
 
-    def _rpc_forcesell(self, trade_id: str) -> Dict[str, str]:
+    def _rpc_forcesell(self, trade_id: str, ordertype: Optional[str] = None) -> Dict[str, str]:
         """
         Handler for forcesell <id>.
         Sells the given trade at current price
@@ -931,7 +953,11 @@ class RPC:
                 current_rate = self._freqtrade.exchange.get_rate(
                     trade.pair, refresh=False, side="sell")
                 sell_reason = SellCheckTuple(sell_type=SellType.FORCE_SELL)
-                self._freqtrade.execute_trade_exit(trade, current_rate, sell_reason)
+                order_type = ordertype or self._freqtrade.strategy.order_types.get(
+                    "forcesell", self._freqtrade.strategy.order_types["sell"])
+
+                self._freqtrade.execute_trade_exit(
+                    trade, current_rate, sell_reason, ordertype=order_type)
         # ---- EOF def _exec_forcesell ----
 
         if self._freqtrade.state != State.RUNNING:
@@ -959,7 +985,9 @@ class RPC:
             self._freqtrade.wallets.update()
             return {'result': f'Created sell order for trade {trade_id}.'}
 
-    def _rpc_forcebuy(self, pair: str, price: Optional[float], custom_stake_amount: Optional[float]) -> Optional[Trade]:
+    def _rpc_forcebuy(self, pair: str, price: Optional[float], 
+                      order_type: Optional[str] = None,
+                      custom_stake_amount: Optional[float] = None) -> Optional[Trade]:
         """
         Handler for forcebuy <asset> <price>
         Buys a pair trade at the given or current price
@@ -989,8 +1017,23 @@ class RPC:
         else:
             stakeamount = self._freqtrade.wallets.get_trade_stake_amount(pair)
 
+        # Safety check limit price above current rate
+        if price is not None and price != 0:
+            proposed_enter_rate = self._freqtrade.exchange.get_rate(pair, refresh=True, side="buy")
+            try:                
+                diff_pct = ((price - proposed_enter_rate) / proposed_enter_rate) * 100.0
+                allowed_diff_pct = self._freqtrade.config.get('forcebuy_hold_pct', 0.01) * 100
+                if diff_pct > allowed_diff_pct:
+                    diff_pct_str = f'{diff_pct:.2f}%'
+                    raise RPCException(f'Request price {price} is {diff_pct_str} higher than current market price {proposed_enter_rate}. Aborted sell.')
+            except ZeroDivisionError:
+                raise RPCException(f'Division by zero')      
+
         # execute buy
-        if self._freqtrade.execute_entry(pair, stakeamount, price, forcebuy=True):
+        if not order_type:
+            order_type = self._freqtrade.strategy.order_types.get(
+                'forcebuy', self._freqtrade.strategy.order_types['buy'])
+        if self._freqtrade.execute_entry(pair, stakeamount, price, ordertype=order_type, buy_tag='forcebuy'):
             Trade.commit()
             trade = Trade.get_trades([Trade.is_open.is_(True), Trade.pair == pair]).first()
             return trade
