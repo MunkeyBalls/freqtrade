@@ -1022,7 +1022,7 @@ class RPC:
             proposed_enter_rate = self._freqtrade.exchange.get_rate(pair, refresh=True, side="buy")
             try:                
                 diff_pct = ((price - proposed_enter_rate) / proposed_enter_rate) * 100.0
-                allowed_diff_pct = self._freqtrade.config.get('forcebuy_hold_pct', 0.01) * 100
+                allowed_diff_pct = self._freqtrade.config.get('limit_buy_safety_pct', 0.01) * 100
                 if diff_pct > allowed_diff_pct:
                     diff_pct_str = f'{diff_pct:.2f}%'
                     raise RPCException(f'Request price {price} is {diff_pct_str} higher than current market price {proposed_enter_rate}. Aborted sell.')
