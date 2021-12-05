@@ -1,10 +1,10 @@
 from datetime import date, datetime
-from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
 from freqtrade.constants import DATETIME_PRINT_FORMAT
+from freqtrade.enums import OrderTypeValues
 
 
 class Ping(BaseModel):
@@ -126,15 +126,10 @@ class Daily(BaseModel):
 
 
 class UnfilledTimeout(BaseModel):
-    buy: int
-    sell: int
-    unit: str
+    buy: Optional[int]
+    sell: Optional[int]
+    unit: Optional[str]
     exit_timeout_count: Optional[int]
-
-
-class OrderTypeValues(str, Enum):
-    limit = 'limit'
-    market = 'market'
 
 
 class OrderTypes(BaseModel):
@@ -150,6 +145,7 @@ class OrderTypes(BaseModel):
 
 class ShowConfig(BaseModel):
     version: str
+    strategy_version: Optional[str]
     api_version: float
     dry_run: bool
     stake_currency: str

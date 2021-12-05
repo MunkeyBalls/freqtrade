@@ -937,7 +937,7 @@ def test_telegram_forcesell_handle(default_conf, update, ticker, fee,
     telegram._forcesell(update=update, context=context)
 
     assert msg_mock.call_count == 4
-    last_msg = msg_mock.call_args_list[-1][0][0]
+    last_msg = msg_mock.call_args_list[-2][0][0]
     assert {
         'type': RPCMessageType.SELL,
         'trade_id': 1,
@@ -1001,7 +1001,7 @@ def test_telegram_forcesell_down_handle(default_conf, update, ticker, fee,
 
     assert msg_mock.call_count == 4
 
-    last_msg = msg_mock.call_args_list[-1][0][0]
+    last_msg = msg_mock.call_args_list[-2][0][0]
     assert {
         'type': RPCMessageType.SELL,
         'trade_id': 1,
@@ -1055,7 +1055,7 @@ def test_forcesell_all_handle(default_conf, update, ticker, fee, mocker) -> None
 
     # Called for each trade 2 times
     assert msg_mock.call_count == 8
-    msg = msg_mock.call_args_list[1][0][0]
+    msg = msg_mock.call_args_list[0][0][0]
     assert {
         'type': RPCMessageType.SELL,
         'trade_id': 1,
@@ -1597,11 +1597,19 @@ def test_help_handle(default_conf, update, mocker) -> None:
 
 def test_version_handle(default_conf, update, mocker) -> None:
 
-    telegram, _, msg_mock = get_telegram_testobject(mocker, default_conf)
+    telegram, freqtradebot, msg_mock = get_telegram_testobject(mocker, default_conf)
 
     telegram._version(update=update, context=MagicMock())
     assert msg_mock.call_count == 1
     assert '*Version:* `{}`'.format(__version__) in msg_mock.call_args_list[0][0][0]
+
+    msg_mock.reset_mock()
+    freqtradebot.strategy.version = lambda: '1.1.1'
+
+    telegram._version(update=update, context=MagicMock())
+    assert msg_mock.call_count == 1
+    assert '*Version:* `{}`'.format(__version__) in msg_mock.call_args_list[0][0][0]
+    assert '*Strategy version: * `1.1.1`' in msg_mock.call_args_list[0][0][0]
 
 
 def test_show_config_handle(default_conf, update, mocker) -> None:
