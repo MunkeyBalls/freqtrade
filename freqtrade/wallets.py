@@ -247,7 +247,7 @@ class Wallets:
 
         if min_stake_amount > max_stake_amount:
             if self._log:
-                logger.warning("Minimum stake amount > available balance.")
+                logger.warning(f"Minimum stake amount ({min_stake_amount}) > available balance ({max_stake_amount}).")
             return 0
         if min_stake_amount is not None and stake_amount < min_stake_amount:
             if self._log:
