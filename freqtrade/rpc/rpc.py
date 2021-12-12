@@ -452,7 +452,10 @@ class RPC:
                     current_rate = NAN
                 trade_percent = (100 * trade.calc_profit_ratio(current_rate))
                 profit_str = f'{trade_percent:.2f}%'
-                trail_pct = 100 * trade.trail_pct
+                if trade.trail_pct is not None: 
+                    trail_pct = 100 * trade.trail_pct
+                else:
+                    trail_pct = 0.0
                 trail_pct_str = f'{trail_pct:.2f}%'
 
                 if trade.stop_loss is not None:
@@ -492,7 +495,10 @@ class RPC:
                     current_rate = NAN
                 trade_percent = (100 * trade.calc_profit_ratio(current_rate))
                 profit_str = f'( {trade_percent:.2f}% )'
-                hold_pct = 100 * trade.hold_pct
+                if trade.hold_pct is not None:
+                    hold_pct = 100 * trade.hold_pct
+                else:
+                    hold_pct = 0
                 hold_pct_str = f'{hold_pct:.2f}%'
                 
                 trades_list.append([
