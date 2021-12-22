@@ -758,7 +758,7 @@ class IStrategy(ABC, HyperStrategyMixin):
             else:
                 logger.warning("CustomStoploss function did not return valid stoploss")
 
-        if trade.trail_pct != 0.0: 
+        if trade.trail_pct is not None and trade.trail_pct != 0.0: 
             if current_profit >= trade.trail_pct:
                 stop_loss_value = self.config.get('trade_trailing_pct', 0.005) * -1 # TODO: Method for linear stoploss, only if >
                 #logger.info(f"Trailing: {trade.pair} {stop_loss_value=} {current_profit=} trail_pct={trade.trail_pct}") 

@@ -640,7 +640,7 @@ class FreqtradeBot(LoggingMixin):
             trade_exchange_list = []
             trade_open_order_id_list = []
             trade_strategy_list = []
-            trade_buy_tag_list = []
+            trade_buy_tag_set = set()
             trade_timeframe_list = []
             trade_id_list = []
             trade_minmax_list = []
@@ -658,7 +658,7 @@ class FreqtradeBot(LoggingMixin):
                 trade_exchange_list.append(pairtrade.exchange)
                 trade_open_order_id_list.append(pairtrade.open_order_id)
                 trade_strategy_list.append(pairtrade.strategy)
-                trade_buy_tag_list.append(pairtrade.buy_tag)
+                trade_buy_tag_set.add(pairtrade.buy_tag)
                 trade_hold_pct_list.append(pairtrade.hold_pct)
                 trade_timeframe_list.append(pairtrade.timeframe)
                 trade_id_list.append(pairtrade.id)
@@ -666,7 +666,7 @@ class FreqtradeBot(LoggingMixin):
                 trade_minmax_list.append(pairtrade.max_rate)
 
             trade_hold_pct_list = list(filter(None, trade_hold_pct_list))
-            trade_buy_tag_list = list(filter(None, trade_buy_tag_list)) 
+            trade_buy_tag_set.discard(None)
             trade_minmax_list = list(filter(None, trade_minmax_list))
 
             new_trade = Trade(
@@ -684,7 +684,7 @@ class FreqtradeBot(LoggingMixin):
                 exchange=trade_exchange_list[-1],
                 open_order_id=trade_open_order_id_list[-1],
                 strategy=trade_strategy_list[-1],
-                buy_tag=''.join(str(e) for e in trade_buy_tag_list),
+                buy_tag=' '.join(str(e).strip() for e in trade_buy_tag_set),
                 timeframe=trade_timeframe_list[-1],
                 max_rate=max(trade_minmax_list) if len(trade_minmax_list) > 0 else None,
                 min_rate=min(trade_minmax_list) if len(trade_minmax_list) > 0 else None,
@@ -813,7 +813,7 @@ class FreqtradeBot(LoggingMixin):
                     trades_closed += 1
 
             except DependencyException as exception:
-                logger.warning('Unable to sell trade %s: %s', trade.pair, exception)
+                logger.warning(f'Unable to sell trade {trade.pair}: {exception}')
 
         # Updating wallets if any trade occurred
         if trades_closed:
@@ -1057,8 +1057,12 @@ class FreqtradeBot(LoggingMixin):
                 if max_timeouts > 0 and canceled_count >= max_timeouts:
                     logger.warning(f'Emergencyselling trade {trade}, as the sell order '
                                    f'timed out {max_timeouts} times.')
-                    self.execute_trade_exit(trade, order.get('price'), sell_reason=SellCheckTuple(
-                        sell_type=SellType.EMERGENCY_SELL))
+                    try:
+                        self.execute_trade_exit(
+                            trade, order.get('price'),
+                            sell_reason=SellCheckTuple(sell_type=SellType.EMERGENCY_SELL))
+                    except DependencyException as exception:
+                        logger.warning(f'Unable to emergency sell trade {trade.pair}: {exception}')
 
     def cancel_all_open_orders(self) -> None:
         """
@@ -1210,29 +1214,23 @@ class FreqtradeBot(LoggingMixin):
     def _should_hold_trade(self, trade: Trade, sell_reason: SellCheckTuple, rate: float) -> bool:        
         hold_trade = False
         logger.warning("Checking holds for %s sell reason %s", trade, sell_reason.sell_reason)
-        if hasattr(trade, 'hold_pct') and trade.hold_pct is not None:        
+        if trade.hold_pct is not None:        
             if trade.hold_pct != 0.0 and sell_reason.sell_reason != "force_sell" and sell_reason.sell_reason != "trailing_stop_loss":
                 hold_trade = True
                 current_profit_ratio = trade.calc_profit_ratio(rate)
                 formatted_profit_ratio = f"{trade.hold_pct * 100}%"
                 formatted_current_profit_ratio = f"{current_profit_ratio * 100}%"
-                self._notify_sell_hold(trade, sell_reason.sell_reason, rate, current_profit_ratio)
-                logger.warning(
-                        "Checking sell %s because the current profit of %s >= %s",
-                        trade, formatted_current_profit_ratio, formatted_profit_ratio
-                    )
-
-
+                logger.warning("Checking sell %s because the current profit of %s >= %s", trade, formatted_current_profit_ratio, formatted_profit_ratio)
                 if current_profit_ratio >= trade.hold_pct:
-                    # formatted_profit_ratio = f"{trade.hold_pct * 100}%"
-                    # formatted_current_profit_ratio = f"{current_profit_ratio * 100}%"
                     logger.warning(
                         "Selling %s because the current profit of %s >= %s",
                         trade, formatted_current_profit_ratio, formatted_profit_ratio
                     )
                     hold_trade = False
 
-        logger.warn("Should hold trade: %s", hold_trade)
+        if hold_trade:
+            self._notify_sell_hold(trade, sell_reason.sell_reason, rate, current_profit_ratio)
+
         return hold_trade
         
     def execute_trade_exit(

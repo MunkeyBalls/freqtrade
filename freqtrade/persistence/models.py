@@ -261,8 +261,8 @@ class LocalTrade():
     strategy: str = ''
     buy_tag: Optional[str] = None
     timeframe: Optional[int] = None
-    hold_pct: Optional[float] = None
-    trail_pct: Optional[float] = None
+    hold_pct: Optional[float] = 0.0
+    trail_pct: Optional[float] = 0.0
 
     def __init__(self, **kwargs):
         for key in kwargs:

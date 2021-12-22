@@ -452,7 +452,10 @@ class RPC:
                     current_rate = NAN
                 trade_percent = (100 * trade.calc_profit_ratio(current_rate))
                 profit_str = f'{trade_percent:.2f}%'
-                trail_pct = 100 * trade.trail_pct
+                if trade.trail_pct is not None: 
+                    trail_pct = 100 * trade.trail_pct
+                else:
+                    trail_pct = 0.0
                 trail_pct_str = f'{trail_pct:.2f}%'
 
                 if trade.stop_loss is not None:
@@ -492,7 +495,10 @@ class RPC:
                     current_rate = NAN
                 trade_percent = (100 * trade.calc_profit_ratio(current_rate))
                 profit_str = f'( {trade_percent:.2f}% )'
-                hold_pct = 100 * trade.hold_pct
+                if trade.hold_pct is not None:
+                    hold_pct = 100 * trade.hold_pct
+                else:
+                    hold_pct = 0
                 hold_pct_str = f'{hold_pct:.2f}%'
                 
                 trades_list.append([
@@ -1217,6 +1223,20 @@ class RPC:
                'whitelist': self._freqtrade.active_pair_whitelist
                }
         return res
+
+    def _rpc_blacklist_delete(self, delete: List[str]) -> Dict:
+        """ Removes pairs from currently active blacklist """
+        errors = {}
+        for pair in delete:
+            if pair in self._freqtrade.pairlists.blacklist:
+                self._freqtrade.pairlists.blacklist.remove(pair)
+            else:
+                errors[pair] = {
+                    'error_msg': f"Pair {pair} is not in the current blacklist."
+                    }
+        resp = self._rpc_blacklist()
+        resp['errors'] = errors
+        return resp
 
     def _rpc_blacklist(self, add: List[str] = None) -> Dict:
         """ Returns the currently active blacklist"""
