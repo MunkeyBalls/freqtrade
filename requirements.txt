@@ -48,6 +48,3 @@ python-dateutil==2.8.2
 
 # MQTT
 paho-mqtt
-
-# NFI
-pandas-ta
