@@ -191,8 +191,8 @@ def test_start_no_hyperopt_allowed(mocker, hyperopt_conf, caplog) -> None:
         start_hyperopt(pargs)
 
 
-def test_start_no_data(mocker, hyperopt_conf) -> None:
-    hyperopt_conf['user_data_dir'] = Path("tests")
+def test_start_no_data(mocker, hyperopt_conf, tmpdir) -> None:
+    hyperopt_conf['user_data_dir'] = Path(tmpdir)
     patched_configuration_load_config_file(mocker, hyperopt_conf)
     mocker.patch('freqtrade.data.history.load_pair_history', MagicMock(return_value=pd.DataFrame))
     mocker.patch(
@@ -201,7 +201,6 @@ def test_start_no_data(mocker, hyperopt_conf) -> None:
     )
 
     patch_exchange(mocker)
-    # TODO: migrate to strategy-based hyperopt
     args = [
         'hyperopt',
         '--config', 'config.json',
@@ -368,7 +367,7 @@ def test_hyperopt_format_results(hyperopt):
         'backtest_start_time': 1619718665,
         'backtest_end_time': 1619718665,
     }
-    results_metrics = generate_strategy_stats({'XRP/BTC': None}, '', bt_result,
+    results_metrics = generate_strategy_stats(['XRP/BTC'], '', bt_result,
                                               Arrow(2017, 11, 14, 19, 32, 00),
                                               Arrow(2017, 12, 14, 19, 32, 00), market_change=0)
 
