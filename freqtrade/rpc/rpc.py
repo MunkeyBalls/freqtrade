@@ -1015,9 +1015,11 @@ class RPC:
         # check if valid pair
 
         # check if pair already has an open pair
-        # trade = Trade.get_trades([Trade.is_open.is_(True), Trade.pair == pair]).first()
-        # if trade:
-        #     raise RPCException(f'position for {pair} already open - id: {trade.id}')
+        # TODO: Add extra config for buying same pair without position_adjustment flag
+        trade = Trade.get_trades([Trade.is_open.is_(True), Trade.pair == pair]).first()
+        if trade:
+            if not self._freqtrade.strategy.position_adjustment_enable:
+                raise RPCException(f'position for {pair} already open - id: {trade.id}')
 
         # gen stake amount
         if custom_stake_amount:
@@ -1041,7 +1043,9 @@ class RPC:
         if not order_type:
             order_type = self._freqtrade.strategy.order_types.get(
                 'forcebuy', self._freqtrade.strategy.order_types['buy'])
-        if self._freqtrade.execute_entry(pair, stakeamount, price, ordertype=order_type, buy_tag='forcebuy'):
+        if self._freqtrade.execute_entry(pair, stakeamount, price,
+                                         ordertype=order_type, trade=trade,
+                                         buy_tag='forcebuy'):
             Trade.commit()
             trade = Trade.get_trades([Trade.is_open.is_(True), Trade.pair == pair]).first()
             return trade
