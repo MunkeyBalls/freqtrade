@@ -523,6 +523,7 @@ class Telegram(RPCHandler):
         :param update: message update
         :return: None
         """
+        self._send_msg(f"Feature is deprecated, migrate to position_adjustment_enable.")
         fiat_currency = self._config.get('fiat_display_currency', '')
         sstake_currency = self._config['stake_currency']
         # pair = context.args[0] if context.args and len(context.args) > 0 else None
@@ -562,6 +563,7 @@ class Telegram(RPCHandler):
 
     @authorized_only
     def _split(self, update: Update, context: CallbackContext) -> None:
+        self._send_msg(f"Feature is deprecated, migrate to position_adjustment_enable.")
         id = context.args[0] if context.args and len(context.args) > 0 else None
 
         if len(context.args) > 1:
@@ -581,6 +583,7 @@ class Telegram(RPCHandler):
 
     @authorized_only
     def _merge(self, update: Update, context: CallbackContext) -> None:
+        self._send_msg(f"Feature is deprecated, migrate to position_adjustment_enable.")
         pair = context.args[0] if context.args and len(context.args) > 0 else None
         if not pair:
             self._send_msg("Pair not set. -/-merge CCC/SSSS")
@@ -949,14 +952,17 @@ class Telegram(RPCHandler):
                     f"(< {balance_dust_level} {result['stake']}):*\n"
                     f"\t`Est. {result['stake']}: "
                     f"{round_coin_value(total_dust_balance, result['stake'], False)}`\n")
+            tc = result['trade_count'] > 0
+            stake_improve = f" `({result['starting_capital_ratio']:.2%})`" if tc else ''
+            fiat_val = f" `({result['starting_capital_fiat_ratio']:.2%})`" if tc else ''
 
             output += ("\n*Estimated Value*:\n"
                        f"\t`{result['stake']}: "
                        f"{round_coin_value(result['total'], result['stake'], False)}`"
-                       f" `({result['starting_capital_ratio']:.2%})`\n"
+                       f"{stake_improve}\n"
                        f"\t`{result['symbol']}: "
                        f"{round_coin_value(result['value'], result['symbol'], False)}`"
-                       f" `({result['starting_capital_fiat_ratio']:.2%})`\n")
+                       f"{fiat_val}\n")
             self._send_msg(output, reload_able=True, callback_path="update_balance",
                            query=update.callback_query)
         except RPCException as e:
@@ -1584,12 +1590,12 @@ class Telegram(RPCHandler):
 
             "_CustomCommands_\n"
             "------------\n"
-            "*/avg <pair>:* `Shows the averaging down calculation of given pair.`\n"
-            "*/merge <pair> :* `Merge open trades of given pair.`\n"
-            "*/split <trade_id> [<n>]:* `Split open trade in n number of trades. May cause dust.`\n"
+            "*/avg <pair>:* `DEPRECATED - migrate to position_adjustment_enable`\n"
+            "*/merge <pair> :* `DEPRECATED - migrate to with position_adjustment_enable`\n"
+            "*/split <trade_id> [<n>]:* `DEPRECATED - migrate to position_adjustment_enable`\n"
             "*/reset_trade <trade_id>|all:* `Reset open_date, min and max_rate and stoploss for the given trade or all trades`\n"
             "*/add_lock <trade_id> [<minutes>]:* `Add a pair lock`\n"
-            "*/hold <id> [<percentage>]:* `Hold a pair until profit percentage is met`\n"
+            "*/hold <id> [<percentage>]:* `Hold a pair until profit percentage is met. Also disables re-buy for now.`\n"
             "*/trail <id> [<percentage>]:* `Start trailing (0.5%) on a trade after profit percentage is met`\n"
             "*/max_trades <n> :* `Set max number of trades`\n"
             )
