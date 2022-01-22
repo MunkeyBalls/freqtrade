@@ -1081,7 +1081,7 @@ class Telegram(RPCHandler):
 
     def _forcebuy_action(self, pair, price=None, custom_stake_amount=None):
         try:
-            self._rpc._rpc_forcebuy(pair=pair, price=price, custom_stake_amount=custom_stake_amount)
+            self._rpc._rpc_forcebuy(pair=pair, price=price, stake_amount=custom_stake_amount)
         except RPCException as e:
             self._send_msg(str(e))
 
