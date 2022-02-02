@@ -54,7 +54,7 @@ Called before entering a trade, makes it possible to manage your position size w
 class AwesomeStrategy(IStrategy):
     def custom_stake_amount(self, pair: str, current_time: datetime, current_rate: float,
                             proposed_stake: float, min_stake: float, max_stake: float,
-                            **kwargs) -> float:
+                            entry_tag: Optional[str], **kwargs) -> float:
 
         dataframe, _ = self.dp.get_analyzed_dataframe(pair=pair, timeframe=self.timeframe)
         current_candle = dataframe.iloc[-1].squeeze()
@@ -74,7 +74,7 @@ class AwesomeStrategy(IStrategy):
 Freqtrade will fall back to the `proposed_stake` value should your code raise an exception. The exception itself will be logged.
 
 !!! Tip
-    You do not _have_ to ensure that `min_stake <= returned_value <= max_stake`. Trades will succeed as the returned value will be clamped to supported range and this acton will be logged.
+    You do not _have_ to ensure that `min_stake <= returned_value <= max_stake`. Trades will succeed as the returned value will be clamped to supported range and this action will be logged.
 
 !!! Tip
     Returning `0` or `None` will prevent trades from being placed.
