@@ -585,7 +585,6 @@ class Telegram(RPCHandler):
         :param update: message update
         :return: None
         """
-        self._send_msg(f"Feature is deprecated, migrate to position_adjustment_enable.")
         fiat_currency = self._config.get('fiat_display_currency', '')
         sstake_currency = self._config['stake_currency']
         # pair = context.args[0] if context.args and len(context.args) > 0 else None
@@ -625,7 +624,6 @@ class Telegram(RPCHandler):
 
     @authorized_only
     def _split(self, update: Update, context: CallbackContext) -> None:
-        self._send_msg(f"Feature is deprecated, migrate to position_adjustment_enable.")
         id = context.args[0] if context.args and len(context.args) > 0 else None
 
         if len(context.args) > 1:
@@ -645,7 +643,6 @@ class Telegram(RPCHandler):
 
     @authorized_only
     def _merge(self, update: Update, context: CallbackContext) -> None:
-        self._send_msg(f"Feature is deprecated, migrate to position_adjustment_enable.")
         pair = context.args[0] if context.args and len(context.args) > 0 else None
         if not pair:
             self._send_msg("Pair not set. -/-merge CCC/SSSS")
