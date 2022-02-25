@@ -269,6 +269,10 @@ class Telegram(RPCHandler):
             message += f", {round_coin_value(msg['stake_amount_fiat'], msg['fiat_currency'])}"
 
         message += ")`"
+
+        if msg['version'] is not None:
+             message += f"\n*Version:* `{msg['version']}`"
+             
         return message
 
     def _format_sell_msg(self, msg: Dict[str, Any]) -> str:
@@ -281,7 +285,7 @@ class Telegram(RPCHandler):
         msg['buy_tag'] = msg['buy_tag'] if "buy_tag" in msg.keys() else None
         msg['emoji'] = self._get_sell_emoji(msg)
 
-        msg['min_ratio'] = round(msg['min_ratio'] * 100., 2)
+        msg['min_ratio'] = round(msg['min_ratio'] * 100, 2)
         msg['max_ratio'] = round(msg['max_ratio'] * 100, 2)
 
         # Check if all sell properties are available.
@@ -305,18 +309,19 @@ class Telegram(RPCHandler):
             f"*Sell Reason:* `{msg['sell_reason']}`\n"
             f"*Duration:* `{msg['duration']} ({msg['duration_min']:.1f} min)`\n"
             f"*Amount:* `{msg['amount']:.8f}`\n"
-            f"*Open Rate:* `{msg['open_rate']:.8f}`\n")
+            f"*Open Rate:* `{msg['open_rate']:.8f}`\n"
+            f"*Min Rate:* `{msg['min_rate']:.8f} ({msg['min_ratio']:.2f}%)`\n"
+            f"*Max Rate:* `{msg['max_rate']:.8f} ({msg['max_ratio']:.2f}%)`\n")
 
         if msg['type'] == RPCMessageType.SELL:
             message += (f"*Current Rate:* `{msg['current_rate']:.8f}`\n"
-                        f"*Min Rate:* `{msg['min_rate']:.8f} ({msg['min_ratio']:.2f}%)`\n"
-                        f"*Max Rate:* `{msg['max_rate']:.8f} ({msg['max_ratio']:.2f}%)`\n"
                         f"*Close Rate:* `{msg['limit']:.8f}`")
 
         elif msg['type'] == RPCMessageType.SELL_FILL:            
-            message += (f"*Min Rate:* `{msg['min_rate']:.8f} ({msg['min_ratio']:.2f}%)`\n"
-                        f"*Max Rate:* `{msg['max_rate']:.8f} ({msg['max_ratio']:.2f}%)`\n" 
-                        f"*Close Rate:* `{msg['close_rate']:.8f}`")
+            message += (f"*Close Rate:* `{msg['close_rate']:.8f}`")
+
+        if msg['version'] is not None:
+            message += (f"\n*Version:* `{msg['version']}`")
 
         return message
 

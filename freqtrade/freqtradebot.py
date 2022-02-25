@@ -812,6 +812,7 @@ class FreqtradeBot(LoggingMixin):
             'amount': safe_value_fallback(order, 'filled', 'amount') or trade.amount,
             'open_date': trade.open_date or datetime.utcnow(),
             'current_rate': current_rate,
+            'version': self.strategy.version()
         }
 
         # Send the message
@@ -1445,6 +1446,12 @@ class FreqtradeBot(LoggingMixin):
         max_ratio = trade.calc_profit_ratio(trade.max_rate)
         gain = "profit" if profit_ratio > 0 else "loss"
 
+        if min_ratio is None:
+            min_ratio = 0
+
+        if max_ratio is None:
+            max_ratio = 0
+
         msg = {
             'type': (RPCMessageType.SELL_FILL if fill
                      else RPCMessageType.SELL),
@@ -1470,6 +1477,7 @@ class FreqtradeBot(LoggingMixin):
             'close_date': trade.close_date or datetime.utcnow(),
             'stake_currency': self.config['stake_currency'],
             'fiat_currency': self.config.get('fiat_display_currency', None),
+            'version': self.strategy.version()
         }
 
         if 'fiat_display_currency' in self.config:
