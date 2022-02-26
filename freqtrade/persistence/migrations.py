@@ -143,7 +143,7 @@ def migrate_trades_and_orders_table(
             {strategy} strategy, {buy_tag} buy_tag, {timeframe} timeframe,
             {open_trade_value} open_trade_value, {close_profit_abs} close_profit_abs, 
             {hold_pct} hold_pct, {trail_pct} trail_pct
-            from {table_back_name}
+            from {trade_back_name}
             """))
 
     migrate_orders_table(engine, order_back_name, cols_order)
@@ -216,25 +216,12 @@ def check_migrate(engine, decl_base, previous_tables) -> None:
     # Check if migration necessary
     # Migrates both trades and orders table!
     # if not has_column(cols, 'buy_tag'):
-    if 'orders' not in previous_tables or not has_column(cols_orders, 'ft_fee_base'):
+    if 'orders' not in previous_tables or not has_column(cols_orders, 'ft_fee_base') \
+        or not has_column(cols_orders, 'hold_pct') or not has_column(cols_orders, 'trail_pct'):
         logger.info(f"Running database migration for trades - "
                     f"backup: {table_back_name}, {order_table_bak_name}")
         migrate_trades_and_orders_table(
             decl_base, inspector, engine, table_back_name, cols, order_table_bak_name, cols_orders)
-
-    if not has_column(cols, 'hold_pct'):
-        logger.info(f'Running database migration for trades - backup: {table_back_name}')
-        migrate_trades_table(decl_base, inspector, engine, table_back_name, cols)
-        # Reread columns - the above recreated the table!
-        inspector = inspect(engine)
-        cols = inspector.get_columns('trades')
-
-    if not has_column(cols, 'trail_pct'):
-        logger.info(f'Running database migration for trades - backup: {table_back_name}')
-        migrate_trades_table(decl_base, inspector, engine, table_back_name, cols)
-        # Reread columns - the above recreated the table!
-        inspector = inspect(engine)
-        cols = inspector.get_columns('trades')         
 
     if 'orders' not in previous_tables and 'trades' in previous_tables:
         logger.info('Moving open orders to Orders table.')
