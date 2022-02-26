@@ -812,6 +812,7 @@ class FreqtradeBot(LoggingMixin):
             'amount': safe_value_fallback(order, 'filled', 'amount') or trade.amount,
             'open_date': trade.open_date or datetime.utcnow(),
             'current_rate': current_rate,
+            'version': self.strategy.version()
         }
 
         # Send the message
@@ -1129,10 +1130,10 @@ class FreqtradeBot(LoggingMixin):
                   or (order_obj and self.strategy.ft_check_timed_out(
                       'sell', trade, order_obj, datetime.now(timezone.utc))
                       ))):
-                self.handle_cancel_exit(trade, order, constants.CANCEL_REASON['TIMEOUT'])
+                canceled = self.handle_cancel_exit(trade, order, constants.CANCEL_REASON['TIMEOUT'])
                 canceled_count = trade.get_exit_order_count()
                 max_timeouts = self.config.get('unfilledtimeout', {}).get('exit_timeout_count', 0)
-                if max_timeouts > 0 and canceled_count >= max_timeouts:
+                if canceled and max_timeouts > 0 and canceled_count >= max_timeouts:
                     logger.warning(f'Emergencyselling trade {trade}, as the sell order '
                                    f'timed out {max_timeouts} times.')
                     try:
@@ -1229,11 +1230,12 @@ class FreqtradeBot(LoggingMixin):
                                   reason=reason)
         return was_trade_fully_canceled
 
-    def handle_cancel_exit(self, trade: Trade, order: Dict, reason: str) -> str:
+    def handle_cancel_exit(self, trade: Trade, order: Dict, reason: str) -> bool:
         """
         Sell cancel - cancel order and update trade
-        :return: Reason for cancel
+        :return: True if exit order was cancelled, false otherwise
         """
+        cancelled = False
         # if trade is not partially completed, just cancel the order
         if order['remaining'] == order['amount'] or order.get('filled') == 0.0:
             if not self.exchange.check_order_canceled_empty(order):
@@ -1244,7 +1246,7 @@ class FreqtradeBot(LoggingMixin):
                     trade.update_order(co)
                 except InvalidOrderException:
                     logger.exception(f"Could not cancel sell order {trade.open_order_id}")
-                    return 'error cancelling order'
+                    return False
                 logger.info('Sell order %s for %s.', reason, trade)
             else:
                 reason = constants.CANCEL_REASON['CANCELLED_ON_EXCHANGE']
@@ -1258,9 +1260,11 @@ class FreqtradeBot(LoggingMixin):
             trade.close_date = None
             trade.is_open = True
             trade.open_order_id = None
+            cancelled = True
         else:
             # TODO: figure out how to handle partially complete sell orders
             reason = constants.CANCEL_REASON['PARTIALLY_FILLED_KEEP_OPEN']
+            cancelled = False
 
         self.wallets.update()
         self._notify_exit_cancel(
@@ -1268,7 +1272,7 @@ class FreqtradeBot(LoggingMixin):
             order_type=self.strategy.order_types['sell'],
             reason=reason
         )
-        return reason
+        return cancelled
 
     def _safe_exit_amount(self, pair: str, amount: float) -> float:
         """
@@ -1445,6 +1449,12 @@ class FreqtradeBot(LoggingMixin):
         max_ratio = trade.calc_profit_ratio(trade.max_rate)
         gain = "profit" if profit_ratio > 0 else "loss"
 
+        if min_ratio is None:
+            min_ratio = 0
+
+        if max_ratio is None:
+            max_ratio = 0
+
         msg = {
             'type': (RPCMessageType.SELL_FILL if fill
                      else RPCMessageType.SELL),
@@ -1470,6 +1480,7 @@ class FreqtradeBot(LoggingMixin):
             'close_date': trade.close_date or datetime.utcnow(),
             'stake_currency': self.config['stake_currency'],
             'fiat_currency': self.config.get('fiat_display_currency', None),
+            'version': self.strategy.version()
         }
 
         if 'fiat_display_currency' in self.config:
@@ -1561,9 +1572,14 @@ class FreqtradeBot(LoggingMixin):
             # Handling of this will happen in check_handle_timedout.
             return True
 
-        order = self.handle_order_fee(trade, order)
+        order_obj = trade.select_order_by_order_id(order_id)
+        if not order_obj:
+            raise DependencyException(
+                f"Order_obj not found for {order_id}. This should not have happened.")
+        self.handle_order_fee(trade, order_obj, order)
 
-        trade.update(order)
+        trade.update_trade(order_obj)
+        # TODO: is the below necessary? it's already done in update_trade for filled buys
         trade.recalc_trade_from_orders()
         Trade.commit()
 
@@ -1662,17 +1678,15 @@ class FreqtradeBot(LoggingMixin):
             return real_amount
         return amount
 
-    def handle_order_fee(self, trade: Trade, order: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_order_fee(self, trade: Trade, order_obj: Order, order: Dict[str, Any]) -> None:
         # Try update amount (binance-fix)
         try:
             new_amount = self.get_real_amount(trade, order)
             if not isclose(safe_value_fallback(order, 'filled', 'amount'), new_amount,
                            abs_tol=constants.MATH_CLOSE_PREC):
-                order['amount'] = new_amount
-                order.pop('filled', None)
+                order_obj.ft_fee_base = trade.amount - new_amount
         except DependencyException as exception:
             logger.warning("Could not update trade amount: %s", exception)
-        return order
 
     def get_real_amount(self, trade: Trade, order: Dict) -> float:
         """
