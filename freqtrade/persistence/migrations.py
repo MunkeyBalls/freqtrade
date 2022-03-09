@@ -216,8 +216,8 @@ def check_migrate(engine, decl_base, previous_tables) -> None:
     # Check if migration necessary
     # Migrates both trades and orders table!
     # if not has_column(cols, 'buy_tag'):
-    if 'orders' not in previous_tables or not has_column(cols_orders, 'ft_fee_base') \
-        or not has_column(cols_orders, 'hold_pct') or not has_column(cols_orders, 'trail_pct'):
+    if ('orders' not in previous_tables or not has_column(cols_orders, 'ft_fee_base')
+        or not has_column(cols_orders, 'hold_pct') or not has_column(cols_orders, 'trail_pct')):
         logger.info(f"Running database migration for trades - "
                     f"backup: {table_back_name}, {order_table_bak_name}")
         migrate_trades_and_orders_table(
