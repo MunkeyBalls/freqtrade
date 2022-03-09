@@ -551,7 +551,6 @@ class FreqtradeBot(LoggingMixin):
             logger.info(f"User requested abortion of buying {pair}")
             self._notify_enter_cancel_strategy(pair, buy_tag, enter_limit_requested, order_type, amount)
             return False
-        amount = self.exchange.amount_to_precision(pair, amount)
         order = self.exchange.create_order(pair=pair, ordertype=order_type, side="buy",
                                            amount=amount, rate=enter_limit_requested,
                                            time_in_force=time_in_force)
@@ -1051,7 +1050,7 @@ class FreqtradeBot(LoggingMixin):
 
         return False
 
-    def handle_trailing_stoploss_on_exchange(self, trade: Trade, order: dict) -> None:
+    def handle_trailing_stoploss_on_exchange(self, trade: Trade, order: Dict) -> None:
         """
         Check to see if stoploss on exchange should be updated
         in case of trailing stoploss on exchange
@@ -1059,7 +1058,9 @@ class FreqtradeBot(LoggingMixin):
         :param order: Current on exchange stoploss order
         :return: None
         """
-        if self.exchange.stoploss_adjust(trade.stop_loss, order):
+        stoploss_norm = self.exchange.price_to_precision(trade.pair, trade.stop_loss)
+
+        if self.exchange.stoploss_adjust(stoploss_norm, order):
             # we check if the update is necessary
             update_beat = self.strategy.order_types.get('stoploss_on_exchange_interval', 60)
             if (datetime.utcnow() - trade.stoploss_last_update).total_seconds() >= update_beat:
@@ -1260,6 +1261,7 @@ class FreqtradeBot(LoggingMixin):
             trade.close_date = None
             trade.is_open = True
             trade.open_order_id = None
+            trade.sell_reason = None
             cancelled = True
         else:
             # TODO: figure out how to handle partially complete sell orders
@@ -1343,8 +1345,8 @@ class FreqtradeBot(LoggingMixin):
 
         # if stoploss is on exchange and we are on dry_run mode,
         # we consider the sell price stop price
-        if self.config['dry_run'] and sell_type == 'stoploss' \
-           and self.strategy.order_types['stoploss_on_exchange']:
+        if (self.config['dry_run'] and sell_type == 'stoploss'
+                and self.strategy.order_types['stoploss_on_exchange']):
             limit = trade.stop_loss
 
         # set custom_exit_price if available

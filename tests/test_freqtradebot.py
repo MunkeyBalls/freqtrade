@@ -727,7 +727,7 @@ def test_execute_entry(mocker, default_conf_usdt, fee, limit_buy_order_usdt,
     call_args = buy_mm.call_args_list[0][1]
     assert call_args['pair'] == pair
     assert call_args['rate'] == bid
-    assert call_args['amount'] == round(stake_amount / bid, 8)
+    assert call_args['amount'] == stake_amount / bid
     buy_rate_mock.reset_mock()
 
     # Should create an open trade with an open order id
@@ -748,7 +748,7 @@ def test_execute_entry(mocker, default_conf_usdt, fee, limit_buy_order_usdt,
     call_args = buy_mm.call_args_list[1][1]
     assert call_args['pair'] == pair
     assert call_args['rate'] == fix_price
-    assert call_args['amount'] == round(stake_amount / fix_price, 8)
+    assert call_args['amount'] == stake_amount / fix_price
 
     # In case of closed order
     limit_buy_order_usdt['status'] = 'closed'
@@ -1266,7 +1266,7 @@ def test_handle_stoploss_on_exchange_trailing(mocker, default_conf_usdt, fee,
 
     cancel_order_mock.assert_called_once_with(100, 'ETH/USDT')
     stoploss_order_mock.assert_called_once_with(
-        amount=27.39726027,
+        amount=pytest.approx(27.39726027),
         pair='ETH/USDT',
         order_types=freqtrade.strategy.order_types,
         stop_price=4.4 * 0.95
@@ -1358,6 +1358,32 @@ def test_handle_stoploss_on_exchange_trailing_error(
     freqtrade.handle_trailing_stoploss_on_exchange(trade, stoploss_order_hanging)
     assert cancel_mock.call_count == 1
     assert log_has_re(r"Could not create trailing stoploss order for pair ETH/USDT\..*", caplog)
+
+
+def test_stoploss_on_exchange_price_rounding(
+        mocker, default_conf_usdt, fee, open_trade_usdt) -> None:
+    patch_RPCManager(mocker)
+    mocker.patch.multiple(
+        'freqtrade.exchange.Exchange',
+        get_fee=fee,
+    )
+    price_mock = MagicMock(side_effect=lambda p, s: int(s))
+    stoploss_mock = MagicMock(return_value={'id': '13434334'})
+    adjust_mock = MagicMock(return_value=False)
+    mocker.patch.multiple(
+        'freqtrade.exchange.Binance',
+        stoploss=stoploss_mock,
+        stoploss_adjust=adjust_mock,
+        price_to_precision=price_mock,
+    )
+    freqtrade = get_patched_freqtradebot(mocker, default_conf_usdt)
+    open_trade_usdt.stoploss_order_id = '13434334'
+    open_trade_usdt.stop_loss = 222.55
+
+    freqtrade.handle_trailing_stoploss_on_exchange(open_trade_usdt, {})
+    assert price_mock.call_count == 1
+    assert adjust_mock.call_count == 1
+    assert adjust_mock.call_args_list[0][0][0] == 222
 
 
 @pytest.mark.usefixtures("init_persistence")
@@ -1458,7 +1484,7 @@ def test_handle_stoploss_on_exchange_custom_stop(
 
     cancel_order_mock.assert_called_once_with(100, 'ETH/USDT')
     stoploss_order_mock.assert_called_once_with(
-        amount=31.57894736,
+        amount=pytest.approx(31.57894736),
         pair='ETH/USDT',
         order_types=freqtrade.strategy.order_types,
         stop_price=4.4 * 0.96
@@ -1583,7 +1609,7 @@ def test_tsl_on_exchange_compatible_with_edge(mocker, edge_conf, fee,
     assert trade.stop_loss == 4.4 * 0.99
     cancel_order_mock.assert_called_once_with(100, 'NEO/BTC')
     stoploss_order_mock.assert_called_once_with(
-        amount=11.41438356,
+        amount=pytest.approx(11.41438356),
         pair='NEO/BTC',
         order_types=freqtrade.strategy.order_types,
         stop_price=4.4 * 0.99
@@ -2554,9 +2580,12 @@ def test_handle_cancel_exit_limit(mocker, default_conf_usdt, fee) -> None:
         exchange='binance',
         open_rate=0.245441,
         open_order_id="123456",
-        open_date=arrow.utcnow().datetime,
+        open_date=arrow.utcnow().shift(days=-2).datetime,
         fee_open=fee.return_value,
         fee_close=fee.return_value,
+        close_rate=0.555,
+        close_date=arrow.utcnow().datetime,
+        sell_reason="sell_reason_whatever",
     )
     order = {'remaining': 1,
              'amount': 1,
@@ -2565,6 +2594,8 @@ def test_handle_cancel_exit_limit(mocker, default_conf_usdt, fee) -> None:
     assert freqtrade.handle_cancel_exit(trade, order, reason)
     assert cancel_order_mock.call_count == 1
     assert send_msg_mock.call_count == 1
+    assert trade.close_rate is None
+    assert trade.sell_reason is None
 
     send_msg_mock.reset_mock()
 
