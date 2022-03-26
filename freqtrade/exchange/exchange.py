@@ -9,7 +9,7 @@ import logging
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from math import ceil
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Coroutine, Dict, List, Optional, Tuple
 
 import arrow
 import ccxt
@@ -376,7 +376,7 @@ class Exchange:
             raise OperationalException(
                 'Could not load markets, therefore cannot start. '
                 'Please investigate the above error for more details.'
-                )
+            )
         quote_currencies = self.get_quote_currencies()
         if stake_currency not in quote_currencies:
             raise OperationalException(
@@ -895,11 +895,11 @@ class Exchange:
             raise OperationalException(e) from e
 
     @retrier(retries=API_FETCH_ORDER_RETRY_COUNT)
-    def fetch_order(self, order_id: str, pair: str) -> Dict:
+    def fetch_order(self, order_id: str, pair: str, params={}) -> Dict:
         if self._config['dry_run']:
             return self.fetch_dry_run_order(order_id)
         try:
-            order = self._api.fetch_order(order_id, pair)
+            order = self._api.fetch_order(order_id, pair, params=params)
             self._log_exchange_response('fetch_order', order)
             return order
         except ccxt.OrderNotFound as e:
@@ -942,7 +942,7 @@ class Exchange:
                 and order.get('filled') == 0.0)
 
     @retrier
-    def cancel_order(self, order_id: str, pair: str) -> Dict:
+    def cancel_order(self, order_id: str, pair: str, params={}) -> Dict:
         if self._config['dry_run']:
             try:
                 order = self.fetch_dry_run_order(order_id)
@@ -953,7 +953,7 @@ class Exchange:
                 return {}
 
         try:
-            order = self._api.cancel_order(order_id, pair)
+            order = self._api.cancel_order(order_id, pair, params=params)
             self._log_exchange_response('cancel_order', order)
             return order
         except ccxt.InvalidOrder as e:
@@ -1384,6 +1384,22 @@ class Exchange:
         data = sorted(data, key=lambda x: x[0])
         return pair, timeframe, data
 
+    def _build_coroutine(self, pair: str, timeframe: str, since_ms: Optional[int]) -> Coroutine:
+        if not since_ms and self.required_candle_call_count > 1:
+            # Multiple calls for one pair - to get more history
+            one_call = timeframe_to_msecs(timeframe) * self.ohlcv_candle_limit(timeframe)
+            move_to = one_call * self.required_candle_call_count
+            now = timeframe_to_next_date(timeframe)
+            since_ms = int((now - timedelta(seconds=move_to // 1000)).timestamp() * 1000)
+
+        if since_ms:
+            return self._async_get_historic_ohlcv(
+                pair, timeframe, since_ms=since_ms, raise_=True)
+        else:
+            # One call ... "regular" refresh
+            return self._async_get_candle_history(
+                pair, timeframe, since_ms=since_ms)
+
     def refresh_latest_ohlcv(self, pair_list: ListPairsWithTimeframes, *,
                              since_ms: Optional[int] = None, cache: bool = True
                              ) -> Dict[Tuple[str, str], DataFrame]:
@@ -1402,22 +1418,15 @@ class Exchange:
         cached_pairs = []
         # Gather coroutines to run
         for pair, timeframe in set(pair_list):
+            if timeframe not in self.timeframes:
+                logger.warning(
+                    f"Cannot download ({pair}, {timeframe}) combination as this timeframe is "
+                    f"not available on {self.name}. Available timeframes are "
+                    f"{', '.join(self.timeframes)}.")
+                continue
             if ((pair, timeframe) not in self._klines or not cache
                     or self._now_is_time_to_refresh(pair, timeframe)):
-                if not since_ms and self.required_candle_call_count > 1:
-                    # Multiple calls for one pair - to get more history
-                    one_call = timeframe_to_msecs(timeframe) * self.ohlcv_candle_limit(timeframe)
-                    move_to = one_call * self.required_candle_call_count
-                    now = timeframe_to_next_date(timeframe)
-                    since_ms = int((now - timedelta(seconds=move_to // 1000)).timestamp() * 1000)
-
-                if since_ms:
-                    input_coroutines.append(self._async_get_historic_ohlcv(
-                        pair, timeframe, since_ms=since_ms, raise_=True))
-                else:
-                    # One call ... "regular" refresh
-                    input_coroutines.append(self._async_get_candle_history(
-                        pair, timeframe, since_ms=since_ms))
+                input_coroutines.append(self._build_coroutine(pair, timeframe, since_ms))
             else:
                 logger.debug(
                     "Using cached candle (OHLCV) data for pair %s, timeframe %s ...",
