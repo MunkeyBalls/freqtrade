@@ -1044,9 +1044,6 @@ class RPC:
         Handler for forcebuy <asset> <price>
         Buys a pair trade at the given or current price
         """
-
-        buy_tag = 'forcebuy'
-
         if not self._freqtrade.config.get('forcebuy_enable', False):
             raise RPCException('Forceentry not enabled.')
 

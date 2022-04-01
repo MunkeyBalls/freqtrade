@@ -608,7 +608,7 @@ class FreqtradeBot(LoggingMixin):
                 f"{name} signal found: about create a new trade for {pair} with stake_amount: "
                 f"{stake_amount} ...")
 
-        if enter_tag == 'forcebuy':
+        if enter_tag == 'forceentry':
             hold_pct = self.config.get('forcebuy_hold_pct', 0.01)
         else:
             hold_pct = 0.0
@@ -1017,23 +1017,6 @@ class FreqtradeBot(LoggingMixin):
         # Send the message
         self.rpc.send_msg(msg)
 
-    def _notify_enter_fill(self, trade: Trade) -> None:
-        msg = {
-            'trade_id': trade.id,
-            'type': RPCMessageType.BUY_FILL,
-            'buy_tag': trade.buy_tag,
-            'exchange': self.exchange.name.capitalize(),
-            'pair': trade.pair,
-            'open_rate': trade.open_rate,
-            'stake_amount': trade.stake_amount,
-            'stake_currency': self.config['stake_currency'],
-            'fiat_currency': self.config.get('fiat_display_currency', None),
-            'amount': trade.amount,
-            'open_date': trade.open_date,
-        }
-        self.rpc.send_msg(msg)
-
-#
 # SELL / exit positions / close trades logic and methods
 #
 

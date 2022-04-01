@@ -1179,7 +1179,7 @@ class Telegram(RPCHandler):
         except RPCException as e:
             self._send_msg(str(e))
 
-    def _forceenter_action(self, pair, price: Optional[float], stake_amount: Optional[float], order_side: SignalDirection):
+    def _forceenter_action(self, pair, price: Optional[float], order_side: SignalDirection, stake_amount: Optional[float]):
         if pair != 'cancel':
             try:
                 self._rpc._rpc_force_entry(pair, price, order_side=order_side, stake_amount=stake_amount)
@@ -1200,27 +1200,6 @@ class Telegram(RPCHandler):
     def _layout_inline_keyboard(buttons: List[InlineKeyboardButton],
                                 cols=3) -> List[List[InlineKeyboardButton]]:
         return [buttons[i:i + cols] for i in range(0, len(buttons), cols)]
-
-    # @authorized_only
-    # def _forcebuy(self, update: Update, context: CallbackContext) -> None:
-    #     """
-    #     Handler for /forcebuy <asset> <price>.
-    #     Buys a pair trade at the given or current price
-    #     :param bot: telegram bot
-    #     :param update: message update
-    #     :return: None
-    #     """
-    #     if context.args:
-    #         pair = context.args[0]
-    #         price = float(context.args[1]) if len(context.args) > 1 else None
-    #         self._forcebuy_action(pair, price)
-    #     else:
-    #         whitelist = self._rpc._rpc_whitelist()['whitelist']
-    #         pairs = [InlineKeyboardButton(text=pair, callback_data=pair) for pair in whitelist]
-
-    #         self._send_msg(msg="Which pair?",
-    #                        keyboard=self._layout_inline_keyboard(pairs))
-
 
     @authorized_only
     def _forceenter(
