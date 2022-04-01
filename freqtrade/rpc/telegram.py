@@ -333,8 +333,8 @@ class Telegram(RPCHandler):
             message += (f"*Current Rate:* `{msg['current_rate']:.8f}`\n"
                         f"*Close Rate:* `{msg['limit']:.8f}`")
 
-        elif msg['type'] == RPCMessageType.SELL_FILL:            
-            message += (f"*Close Rate:* `{msg['close_rate']:.8f}`")
+        elif msg['type'] == RPCMessageType.SELL_FILL:
+            message += f"*Close Rate:* `{msg['close_rate']:.8f}`"
 
         if msg['version'] is not None:
             message += (f"\n*Version:* `{msg['version']}`")
@@ -1179,7 +1179,7 @@ class Telegram(RPCHandler):
         except RPCException as e:
             self._send_msg(str(e))
 
-    def _forceenter_action(self, pair, price: Optional[float], order_side: SignalDirection, stake_amount: Optional[float]):
+    def _forceenter_action(self, pair, price: Optional[float], order_side: SignalDirection, stake_amount: Optional[float] = None):
         if pair != 'cancel':
             try:
                 self._rpc._rpc_force_entry(pair, price, order_side=order_side, stake_amount=stake_amount)

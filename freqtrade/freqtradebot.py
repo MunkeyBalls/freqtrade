@@ -1464,11 +1464,11 @@ class FreqtradeBot(LoggingMixin):
             raise DependencyException(
                 f"Not enough amount to exit trade. Trade-amount: {amount}, Wallet: {wallet_amount}")
 
-    def _should_hold_trade(self, trade: Trade, sell_reason: SellCheckTuple, rate: float) -> bool:        
+    def _should_hold_trade(self, trade: Trade, exit_reason: ExitCheckTuple, rate: float) -> bool:        
         hold_trade = False
-        logger.warning("Checking holds for %s sell reason %s", trade, sell_reason.sell_reason)
-        if trade.hold_pct is not None:        
-            if trade.hold_pct != 0.0 and sell_reason.sell_reason != "force_sell" and sell_reason.sell_reason != "trailing_stop_loss":
+        logger.warning("Checking holds for %s sell reason %s", trade, exit_reason.exit_type)
+        if trade.hold_pct is not None:
+            if trade.hold_pct != 0.0 and exit_reason.exit_type not in (ExitType.FORCE_SELL, ExitType.TRAILING_STOP_LOSS):
                 hold_trade = True
                 current_profit_ratio = trade.calc_profit_ratio(rate)
                 formatted_profit_ratio = f"{trade.hold_pct * 100}%"
@@ -1482,7 +1482,7 @@ class FreqtradeBot(LoggingMixin):
                     hold_trade = False
 
         if hold_trade:
-            self._notify_sell_hold(trade, sell_reason.sell_reason, rate, current_profit_ratio)
+            self._notify_sell_hold(trade, exit_reason.exit_reason, rate, current_profit_ratio)
 
         return hold_trade
         
@@ -1549,7 +1549,7 @@ class FreqtradeBot(LoggingMixin):
             return False
 
         # Abort sell if trade is in hold
-        if self._should_hold_trade(trade, sell_reason, limit) :
+        if self._should_hold_trade(trade, exit_check, limit) :
             logger.info(f"Aborted selling {trade.pair} because of active hold")
             return False
 

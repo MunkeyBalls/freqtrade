@@ -302,7 +302,7 @@ class RPC:
             for pairtrade in pairtrades:
                 try:
                     current_rate = self._freqtrade.exchange.get_rate(
-                        pairtrade.pair, refresh=False, side="sell")
+                        pairtrade.pair, side='exit', is_short=pairtrade.is_short, refresh=False)
                 except (PricingError, ExchangeError):
                     current_rate = NAN
                 trade_percent = (100 * pairtrade.calc_profit_ratio(current_rate))
@@ -344,7 +344,7 @@ class RPC:
 
             try:
                 pair_current_rate = self._freqtrade.exchange.get_rate(
-                    pair, refresh=False, side="sell")
+                    pair, refresh=False, side='exit', is_short=pairtrade.is_short)
             except (PricingError, ExchangeError):
                 pair_current_rate = NAN
             sell_trade = Decimal(total_amount) * Decimal(pair_current_rate)
@@ -466,7 +466,7 @@ class RPC:
                 # calculate profit and send message to user
                 try:
                     current_rate = self._freqtrade.exchange.get_rate(
-                        trade.pair, refresh=False, side="sell")
+                        trade.pair, refresh=False, side='exit', is_short=trade.is_short)
                 except (PricingError, ExchangeError):
                     current_rate = NAN
                 trade_percent = (100 * trade.calc_profit_ratio(current_rate))
@@ -509,7 +509,7 @@ class RPC:
                 # calculate profit and send message to user
                 try:
                     current_rate = self._freqtrade.exchange.get_rate(
-                        trade.pair, refresh=False, side="sell")
+                        trade.pair, refresh=False, side='exit', is_short=trade.is_short)
                 except (PricingError, ExchangeError):
                     current_rate = NAN
                 trade_percent = (100 * trade.calc_profit_ratio(current_rate))
@@ -1073,7 +1073,7 @@ class RPC:
 
         # Safety check limit price above current rate
         if price is not None and price != 0:
-            proposed_enter_rate = self._freqtrade.exchange.get_rate(pair, refresh=True, side="buy")
+            proposed_enter_rate = self._freqtrade.exchange.get_rate(pair, refresh=True, side='entry', is_short=is_short)
             try:                
                 diff_pct = ((price - proposed_enter_rate) / proposed_enter_rate) * 100.0
                 allowed_diff_pct = self._freqtrade.config.get('limit_buy_safety_pct', 0.01) * 100
