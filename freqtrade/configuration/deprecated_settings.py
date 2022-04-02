@@ -64,6 +64,7 @@ def process_deprecated_setting(config: Dict[str, Any],
 
         section_new_config = config.get(section_new, {}) if section_new else config
         section_new_config[name_new] = section_old_config[name_old]
+        del section_old_config[name_old]
 
 
 def process_temporary_deprecated_settings(config: Dict[str, Any]) -> None:
@@ -100,16 +101,11 @@ def process_temporary_deprecated_settings(config: Dict[str, Any]) -> None:
             "from the edge configuration."
         )
     if 'ticker_interval' in config:
-        logger.warning(
-            "DEPRECATED: "
+
+        raise OperationalException(
+            "DEPRECATED: 'ticker_interval' detected. "
             "Please use 'timeframe' instead of 'ticker_interval."
         )
-        if 'timeframe' in config:
-            raise OperationalException(
-                "Both 'timeframe' and 'ticker_interval' detected."
-                "Please remove 'ticker_interval' from your configuration to continue operating."
-            )
-        config['timeframe'] = config['ticker_interval']
 
     if 'protections' in config:
         logger.warning("DEPRECATED: Setting 'protections' in the configuration is deprecated.")

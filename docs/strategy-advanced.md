@@ -49,7 +49,7 @@ from freqtrade.exchange import timeframe_to_prev_date
 
 class AwesomeStrategy(IStrategy):
     def confirm_trade_exit(self, pair: str, trade: 'Trade', order_type: str, amount: float,
-                           rate: float, time_in_force: str, sell_reason: str,
+                           rate: float, time_in_force: str, exit_reason: str,
                            current_time: 'datetime', **kwargs) -> bool:
         # Obtain pair dataframe.
         dataframe, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
@@ -77,47 +77,47 @@ class AwesomeStrategy(IStrategy):
 
 ***
 
-## Buy Tag
+## Enter Tag
 
 When your strategy has multiple buy signals, you can name the signal that triggered.
-Then you can access you buy signal on `custom_sell`
+Then you can access you buy signal on `custom_exit`
 
 ```python
-def populate_buy_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
     dataframe.loc[
         (
             (dataframe['rsi'] < 35) &
             (dataframe['volume'] > 0)
         ),
-        ['buy', 'buy_tag']] = (1, 'buy_signal_rsi')
+        ['enter_long', 'enter_tag']] = (1, 'buy_signal_rsi')
 
     return dataframe
 
-def custom_sell(self, pair: str, trade: Trade, current_time: datetime, current_rate: float,
-                    current_profit: float, **kwargs):
+def custom_exit(self, pair: str, trade: Trade, current_time: datetime, current_rate: float,
+                current_profit: float, **kwargs):
     dataframe, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
     last_candle = dataframe.iloc[-1].squeeze()
-    if trade.buy_tag == 'buy_signal_rsi' and last_candle['rsi'] > 80:
+    if trade.enter_tag == 'buy_signal_rsi' and last_candle['rsi'] > 80:
         return 'sell_signal_rsi'
     return None
 
 ```
 
 !!! Note
-    `buy_tag` is limited to 100 characters, remaining data will be truncated.
+    `enter_tag` is limited to 100 characters, remaining data will be truncated.
 
 ## Exit tag
 
 Similar to [Buy Tagging](#buy-tag), you can also specify a sell tag.
 
 ``` python
-def populate_sell_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
     dataframe.loc[
         (
             (dataframe['rsi'] > 70) &
             (dataframe['volume'] > 0)
         ),
-        ['sell', 'exit_tag']] = (1, 'exit_rsi')
+        ['exit_long', 'exit_tag']] = (1, 'exit_rsi')
 
     return dataframe
 ```
@@ -125,7 +125,7 @@ def populate_sell_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame
 The provided exit-tag is then used as sell-reason - and shown as such in backtest results.
 
 !!! Note
-    `sell_reason` is limited to 100 characters, remaining data will be truncated.
+    `exit_reason` is limited to 100 characters, remaining data will be truncated.
 
 ## Strategy version
 
@@ -146,7 +146,7 @@ def version(self) -> str:
 
 The strategies can be derived from other strategies. This avoids duplication of your custom strategy code. You can use this technique to override small parts of your main strategy, leaving the rest untouched:
 
-``` python
+``` python title="user_data/strategies/myawesomestrategy.py"
 class MyAwesomeStrategy(IStrategy):
     ...
     stoploss = 0.13
@@ -155,6 +155,10 @@ class MyAwesomeStrategy(IStrategy):
     # should be in any custom strategy...
     ...
 
+```
+
+``` python title="user_data/strategies/MyAwesomeStrategy2.py"
+from myawesomestrategy import MyAwesomeStrategy
 class MyAwesomeStrategy2(MyAwesomeStrategy):
     # Override something
     stoploss = 0.08
@@ -163,16 +167,7 @@ class MyAwesomeStrategy2(MyAwesomeStrategy):
 
 Both attributes and methods may be overridden, altering behavior of the original strategy in a way you need.
 
-!!! Note "Parent-strategy in different files"
-    If you have the parent-strategy in a different file, you'll need to add the following to the top of your "child"-file to ensure proper loading, otherwise freqtrade may not be able to load the parent strategy correctly.
-
-    ``` python
-    import sys
-    from pathlib import Path
-    sys.path.append(str(Path(__file__).parent))
-
-    from myawesomestrategy import MyAwesomeStrategy
-    ```
+While keeping the subclass in the same file is technically possible, it can lead to some problems with hyperopt parameter files, we therefore recommend to use separate strategy files, and import the parent strategy as shown above.
 
 ## Embedding Strategies
 
