@@ -45,8 +45,6 @@ ENV LD_LIBRARY_PATH /usr/local/lib
 
 COPY --from=python-deps --chown=ftuser:ftuser /home/ftuser/.local /home/ftuser/.local
 
-RUN apt-get -y install nano
-
 USER ftuser
 # Install and execute
 COPY --chown=ftuser:ftuser . /freqtrade/
