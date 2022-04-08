@@ -220,9 +220,9 @@ CONF_SCHEMA = {
             'properties': {
                 'entry': {'type': 'string', 'enum': ORDERTYPE_POSSIBILITIES},
                 'exit': {'type': 'string', 'enum': ORDERTYPE_POSSIBILITIES},
-                'forceexit': {'type': 'string', 'enum': ORDERTYPE_POSSIBILITIES},
-                'forceentry': {'type': 'string', 'enum': ORDERTYPE_POSSIBILITIES},
-                'emergencyexit': {
+                'force_exit': {'type': 'string', 'enum': ORDERTYPE_POSSIBILITIES},
+                'force_entry': {'type': 'string', 'enum': ORDERTYPE_POSSIBILITIES},
+                'emergency_exit': {
                     'type': 'string',
                     'enum': ORDERTYPE_POSSIBILITIES,
                     'default': 'market'},
@@ -436,7 +436,7 @@ CONF_SCHEMA = {
         'export': {'type': 'string', 'enum': EXPORT_OPTIONS, 'default': 'trades'},
         'disableparamexport': {'type': 'boolean'},
         'initial_state': {'type': 'string', 'enum': ['running', 'stopped']},
-        'forcebuy_enable': {'type': 'boolean'},
+        'force_entry_enable': {'type': 'boolean'},
         'disable_dataframe_checks': {'type': 'boolean'},
         'internals': {
             'type': 'object',

@@ -9,6 +9,8 @@ You can use the quick summary as checklist. Please refer to the detailed section
 
 ## Quick summary / migration checklist
 
+Note : `force_exit`, `force_enter`, `emergency_exit` are changed to `force_exit`, `force_enter`, `emergency_exit` respectively.
+
 * Strategy methods:
   * [`populate_buy_trend()` -> `populate_entry_trend()`](#populate_buy_trend)
   * [`populate_sell_trend()` -> `populate_exit_trend()`](#populate_sell_trend)
@@ -66,6 +68,7 @@ You can use the quick summary as checklist. Please refer to the detailed section
     * `sell_profit_only` -> `exit_profit_only`
     * `sell_profit_offset` -> `exit_profit_offset`
     * `ignore_roi_if_buy_signal` -> `ignore_roi_if_entry_signal`
+    * `forcebuy_enable` -> `force_entry_enable`
 
 ## Extensive explanation
 
@@ -334,6 +337,7 @@ After:
 #### `order_types`
 
 `order_types` have changed all wordings from `buy` to `entry` - and `sell` to `exit`.
+And two words are joined with `_`. 
 
 ``` python hl_lines="2-6"
     order_types = {
@@ -354,9 +358,9 @@ After:
     order_types = {
         "entry": "limit",
         "exit": "limit",
-        "emergencyexit": "market",
-        "forceexit": "market",
-        "forceentry": "market",
+        "emergency_exit": "market",
+        "force_exit": "market",
+        "force_entry": "market",
         "stoploss": "market",
         "stoploss_on_exchange": false,
         "stoploss_on_exchange_interval": 60

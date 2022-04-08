@@ -166,7 +166,7 @@ Mandatory parameters are marked as **Required**, which means that they are requi
 | `bot_name` | Name of the bot. Passed via API to a client - can be shown to distinguish / name bots.<br> *Defaults to `freqtrade`*<br> **Datatype:** String
 | `db_url` | Declares database URL to use. NOTE: This defaults to `sqlite:///tradesv3.dryrun.sqlite` if `dry_run` is `true`, and to `sqlite:///tradesv3.sqlite` for production instances. <br> **Datatype:** String, SQLAlchemy connect string
 | `initial_state` | Defines the initial application state. If set to stopped, then the bot has to be explicitly started via `/start` RPC command. <br>*Defaults to `stopped`.* <br> **Datatype:** Enum, either `stopped` or `running`
-| `forcebuy_enable` | Enables the RPC Commands to force a buy. More information below. <br> **Datatype:** Boolean
+| `force_entry_enable` | Enables the RPC Commands to force a Trade entry. More information below. <br> **Datatype:** Boolean
 | `disable_dataframe_checks` | Disable checking the OHLCV dataframe returned from the strategy methods for correctness. Only use when intentionally changing the dataframe and understand what you are doing. [Strategy Override](#parameters-in-the-strategy).<br> *Defaults to `False`*. <br> **Datatype:** Boolean
 | `strategy` | **Required** Defines Strategy class to use. Recommended to be set via `--strategy NAME`. <br> **Datatype:** ClassName
 | `strategy_path` | Adds an additional strategy lookup path (must be a directory). <br> **Datatype:** String
@@ -345,9 +345,9 @@ If it is not set in either Strategy or Configuration, a default of 1000% `{"0": 
 !!! Note "Special case to forceexit after a specific time"
     A special case presents using `"<N>": -1` as ROI. This forces the bot to exit a trade after N Minutes, no matter if it's positive or negative, so represents a time-limited force-exit.
 
-### Understand forcebuy_enable
+### Understand force_entry_enable
 
-The `forcebuy_enable` configuration parameter enables the usage of forceenter commands via Telegram and REST API.
+The `force_entry_enable` configuration parameter enables the usage of force-enter (`/forcelong`, `/forceshort`) commands via Telegram and REST API.
 For security reasons, it's disabled by default, and freqtrade will show a warning message on startup if enabled.
 For example, you can send `/forceenter ETH/BTC` to the bot, which will result in freqtrade buying the pair and holds it until a regular exit-signal (ROI, stoploss, /forceexit) appears.
 
@@ -376,7 +376,7 @@ For example, if your strategy is using a 1h timeframe, and you only want to buy 
 
 ### Understand order_types
 
-The `order_types` configuration parameter maps actions (`entry`, `exit`, `stoploss`, `emergencyexit`, `forceexit`, `forceentry`) to order-types (`market`, `limit`, ...) as well as configures stoploss to be on the exchange and defines stoploss on exchange update interval in seconds.
+The `order_types` configuration parameter maps actions (`entry`, `exit`, `stoploss`, `emergency_exit`, `force_exit`, `force_entry`) to order-types (`market`, `limit`, ...) as well as configures stoploss to be on the exchange and defines stoploss on exchange update interval in seconds.
 
 This allows to enter using limit orders, exit using limit-orders, and create stoplosses using market orders.
 It also allows to set the
@@ -386,7 +386,7 @@ stoploss "on exchange" which means stoploss order would be placed immediately on
 
 If this is configured, the following 4 values (`entry`, `exit`, `stoploss` and `stoploss_on_exchange`) need to be present, otherwise, the bot will fail to start.
 
-For information on (`emergencyexit`,`forceexit`, `forceentry`, `stoploss_on_exchange`,`stoploss_on_exchange_interval`,`stoploss_on_exchange_limit_ratio`) please see stop loss documentation [stop loss on exchange](stoploss.md)
+For information on (`emergency_exit`,`force_exit`, `force_entry`, `stoploss_on_exchange`,`stoploss_on_exchange_interval`,`stoploss_on_exchange_limit_ratio`) please see stop loss documentation [stop loss on exchange](stoploss.md)
 
 Syntax for Strategy:
 
@@ -394,9 +394,9 @@ Syntax for Strategy:
 order_types = {
     "entry": "limit",
     "exit": "limit",
-    "emergencyexit": "market",
-    "forceentry": "market",
-    "forceexit": "market",
+    "emergency_exit": "market",
+    "force_entry": "market",
+    "force_exit": "market",
     "stoploss": "market",
     "stoploss_on_exchange": False,
     "stoploss_on_exchange_interval": 60,
@@ -410,9 +410,9 @@ Configuration:
 "order_types": {
     "entry": "limit",
     "exit": "limit",
-    "emergencyexit": "market",
-    "forceentry": "market",
-    "forceexit": "market",
+    "emergency_exit": "market",
+    "force_entry": "market",
+    "force_exit": "market",
     "stoploss": "market",
     "stoploss_on_exchange": false,
     "stoploss_on_exchange_interval": 60
@@ -435,7 +435,7 @@ Configuration:
     If `stoploss_on_exchange` is enabled and the stoploss is cancelled manually on the exchange, then the bot will create a new stoploss order.
 
 !!! Warning "Warning: stoploss_on_exchange failures"
-    If stoploss on exchange creation fails for some reason, then an "emergency exit" is initiated. By default, this will exit the trade using a market order. The order-type for the emergency-exit can be changed by setting the `emergencyexit` value in the `order_types` dictionary - however, this is not advised.
+    If stoploss on exchange creation fails for some reason, then an "emergency exit" is initiated. By default, this will exit the trade using a market order. The order-type for the emergency-exit can be changed by setting the `emergency_exit` value in the `order_types` dictionary - however, this is not advised.
 
 ### Understand order_time_in_force
 

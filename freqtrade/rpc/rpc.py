@@ -137,7 +137,7 @@ class RPC:
                                                   ) if 'timeframe' in config else 0,
             'exchange': config['exchange']['name'],
             'strategy': config['strategy'],
-            'forcebuy_enabled': config.get('forcebuy_enable', False),
+            'force_entry_enable': config.get('force_entry_enable', False),
             'exit_pricing': config.get('exit_pricing', {}),
             'entry_pricing': config.get('entry_pricing', {}),
             'state': str(botstate),
@@ -979,7 +979,7 @@ class RPC:
         self._freqtrade.config['max_open_trades'] = int(slots)
         return {'result': f'Set amount of slots to {slots}.'}
 
-    def _rpc_forceexit(self, trade_id: str, ordertype: Optional[str] = None) -> Dict[str, str]:
+    def _rpc_force_exit(self, trade_id: str, ordertype: Optional[str] = None) -> Dict[str, str]:
         """
         Handler for forcesell <id>.
         Sells the given trade at current price
@@ -1004,7 +1004,7 @@ class RPC:
                     trade.pair, side='exit', is_short=trade.is_short, refresh=True)
                 exit_check = ExitCheckTuple(exit_type=ExitType.FORCE_EXIT)
                 order_type = ordertype or self._freqtrade.strategy.order_types.get(
-                    "forceexit", self._freqtrade.strategy.order_types["exit"])
+                    "force_exit", self._freqtrade.strategy.order_types["exit"])
 
                 self._freqtrade.execute_trade_exit(
                     trade, current_rate, exit_check, ordertype=order_type)
@@ -1027,7 +1027,7 @@ class RPC:
                 trade_filter=[Trade.id == trade_id, Trade.is_open.is_(True), ]
             ).first()
             if not trade:
-                logger.warning('forceexit: Invalid argument received')
+                logger.warning('force_exit: Invalid argument received')
                 raise RPCException('invalid argument')
 
             _exec_forcesell(trade)
@@ -1039,13 +1039,14 @@ class RPC:
                          order_type: Optional[str] = None,
                          order_side: SignalDirection = SignalDirection.LONG,
                          stake_amount: Optional[float] = None,
-                         enter_tag: Optional[str] = 'forceentry') -> Optional[Trade]:
+                         enter_tag: Optional[str] = 'force_entry') -> Optional[Trade]:
         """
         Handler for forcebuy <asset> <price>
         Buys a pair trade at the given or current price
         """
-        if not self._freqtrade.config.get('forcebuy_enable', False):
-            raise RPCException('Forceentry not enabled.')
+
+        if not self._freqtrade.config.get('force_entry_enable', False):
+            raise RPCException('Force_entry not enabled.')
 
         if self._freqtrade.state != State.RUNNING:
             raise RPCException('trader is not running')
@@ -1086,7 +1087,7 @@ class RPC:
         # execute buy
         if not order_type:
             order_type = self._freqtrade.strategy.order_types.get(
-                'forceentry', self._freqtrade.strategy.order_types['entry'])
+                'force_entry', self._freqtrade.strategy.order_types['entry'])
         if self._freqtrade.execute_entry(pair, stake_amount, price,
                                          ordertype=order_type, trade=trade,
                                          is_short=is_short,

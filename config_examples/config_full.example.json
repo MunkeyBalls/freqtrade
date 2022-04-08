@@ -54,9 +54,9 @@
     "order_types": {
         "entry": "limit",
         "exit": "limit",
-        "emergencyexit": "market",
-        "forceexit": "market",
-        "forceentry": "market",
+        "emergency_exit": "market",
+        "force_exit": "market",
+        "force_entry": "market",
         "stoploss": "market",
         "stoploss_on_exchange": false,
         "stoploss_on_exchange_interval": 60,
@@ -174,7 +174,7 @@
     "bot_name": "freqtrade",
     "db_url": "sqlite:///tradesv3.sqlite",
     "initial_state": "running",
-    "forcebuy_enable": false,
+    "force_entry_enable": false,
     "internals": {
         "process_throttle_secs": 5,
         "heartbeat_interval": 60
