@@ -1176,7 +1176,7 @@ class Telegram(RPCHandler):
         except RPCException as e:
             self._send_msg(str(e))
 
-    def _force_enter_action(self, pair, price: Optional[float], order_side: SignalDirection):
+    def _force_enter_action(self, pair, price: Optional[float], order_side: SignalDirection, stake_amount: Optional[float] = None):
         if pair != 'cancel':
             try:
                 self._rpc._rpc_force_entry(pair, price, order_side=order_side, stake_amount=stake_amount)
