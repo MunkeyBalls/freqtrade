@@ -92,15 +92,14 @@ SUPPORTED_FIAT = [
 ]
 
 MINIMAL_CONFIG = {
-    'stake_currency': '',
-    'dry_run': True,
-    'exchange': {
-        'name': '',
-        'key': '',
-        'secret': '',
-        'pair_whitelist': [],
-        'ccxt_async_config': {
-            'enableRateLimit': True,
+    "stake_currency": "",
+    "dry_run": True,
+    "exchange": {
+        "name": "",
+        "key": "",
+        "secret": "",
+        "pair_whitelist": [],
+        "ccxt_async_config": {
         }
     }
 }
