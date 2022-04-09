@@ -611,7 +611,7 @@ class FreqtradeBot(LoggingMixin):
                 f"{stake_amount} ...")
 
         if enter_tag == 'forceentry':
-            hold_pct = self.config.get('forcebuy_hold_pct', 0.01)
+            hold_pct = self.config.get('forcebuy_hold_pct', 0.0)
         else:
             hold_pct = 0.0
 
