@@ -198,7 +198,6 @@ class RPC:
 
                 trade_dict = trade.to_json()
                 trade_dict.update(dict(
-                    base_currency=self._freqtrade.config['stake_currency'],
                     close_profit=trade.close_profit if trade.close_profit is not None else None,
                     current_rate=current_rate,
                     current_profit=current_profit,  # Deprecated
@@ -986,10 +985,10 @@ class RPC:
 
     def _rpc_force_exit(self, trade_id: str, ordertype: Optional[str] = None) -> Dict[str, str]:
         """
-        Handler for forcesell <id>.
+        Handler for forceexit <id>.
         Sells the given trade at current price
         """
-        def _exec_forcesell(trade: Trade) -> None:
+        def _exec_force_exit(trade: Trade) -> None:
             # Check if there is there is an open order
             fully_canceled = False
             if trade.open_order_id:
@@ -1022,7 +1021,7 @@ class RPC:
             if trade_id == 'all':
                 # Execute sell for all open orders
                 for trade in Trade.get_open_trades():
-                    _exec_forcesell(trade)
+                    _exec_force_exit(trade)
                 Trade.commit()
                 self._freqtrade.wallets.update()
                 return {'result': 'Created sell orders for all open trades.'}
@@ -1035,7 +1034,7 @@ class RPC:
                 logger.warning('force_exit: Invalid argument received')
                 raise RPCException('invalid argument')
 
-            _exec_forcesell(trade)
+            _exec_force_exit(trade)
             Trade.commit()
             self._freqtrade.wallets.update()
             return {'result': f'Created sell order for trade {trade_id}.'}

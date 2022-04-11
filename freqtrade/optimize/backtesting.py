@@ -417,7 +417,7 @@ class Backtesting:
         roi_entry, roi = self.strategy.min_roi_reached_entry(trade_dur)
         if roi is not None and roi_entry is not None:
             if roi == -1 and roi_entry % self.timeframe_min == 0:
-                # When forceselling with ROI=-1, the roi time will always be equal to trade_dur.
+                # When force_exiting with ROI=-1, the roi time will always be equal to trade_dur.
                 # If that entry is a multiple of the timeframe (so on candle open)
                 # - we'll use open instead of close
                 return row[OPEN_IDX]
@@ -726,6 +726,7 @@ class Backtesting:
 
         if stake_amount and (not min_stake_amount or stake_amount > min_stake_amount):
             self.order_id_counter += 1
+            base_currency = self.exchange.get_pair_base_currency(pair)
             amount = round((stake_amount / propose_rate) * leverage, 8)
             is_short = (direction == 'short')
             # Necessary for Margin trading. Disabled until support is enabled.
@@ -738,6 +739,8 @@ class Backtesting:
                     id=self.trade_id_counter,
                     open_order_id=self.order_id_counter,
                     pair=pair,
+                    base_currency=base_currency,
+                    stake_currency=self.config['stake_currency'],
                     open_rate=propose_rate,
                     open_rate_requested=propose_rate,
                     open_date=current_time,
