@@ -1472,7 +1472,7 @@ class FreqtradeBot(LoggingMixin):
         hold_trade = False
         logger.warning("Checking holds for %s sell reason %s", trade, exit_reason.exit_type)
         if trade.hold_pct is not None:
-            if trade.hold_pct != 0.0 and exit_reason.exit_type not in (ExitType.FORCE_SELL, ExitType.TRAILING_STOP_LOSS):
+            if trade.hold_pct != 0.0 and exit_reason.exit_type not in (ExitType.FORCE_EXIT, ExitType.TRAILING_STOP_LOSS):
                 hold_trade = True
                 current_profit_ratio = trade.calc_profit_ratio(rate)
                 formatted_profit_ratio = f"{trade.hold_pct * 100}%"
