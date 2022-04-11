@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 BT_DATA_COLUMNS = ['pair', 'stake_amount', 'amount', 'open_date', 'close_date',
                    'open_rate', 'close_rate',
                    'fee_open', 'fee_close', 'trade_duration',
-                   'profit_ratio', 'profit_abs', 'sell_reason',
+                   'profit_ratio', 'profit_abs', 'exit_reason',
                    'initial_stop_loss_abs', 'initial_stop_loss_ratio', 'stop_loss_abs',
                    'stop_loss_ratio', 'min_rate', 'max_rate', 'is_open', 'enter_tag',
                    'is_short', 'hold_pct'
@@ -193,14 +193,7 @@ def find_existing_backtest_stats(dirname: Union[Path, str], run_ids: Dict[str, s
                 continue
 
             if min_backtest_date is not None:
-                try:
-                    backtest_date = strategy_metadata['backtest_start_time']
-                except KeyError:
-                    # TODO: this can be removed starting from feb 2022
-                    # The metadata-file without start_time was only available in develop
-                    # and was never included in an official release.
-                    # Older metadata format without backtest time, too old to consider.
-                    return results
+                backtest_date = strategy_metadata['backtest_start_time']
                 backtest_date = datetime.fromtimestamp(backtest_date, tz=timezone.utc)
                 if backtest_date < min_backtest_date:
                     # Do not use a cached result for this strategy as first result is too old.

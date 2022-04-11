@@ -115,28 +115,28 @@ class Mqtt(RPCHandler):
 
 
     def compose_message(self, msg: Dict[str, Any], msg_type: RPCMessageType) -> str:
-        if msg_type in [RPCMessageType.BUY, RPCMessageType.BUY_FILL]:
-            message = self._format_buy_msg(msg)
+        if msg_type in [RPCMessageType.ENTRY, RPCMessageType.ENTRY_FILL]:
+            message = self._format_entry_msg(msg)
 
-        elif msg_type in [RPCMessageType.SELL, RPCMessageType.SELL_FILL]:
-            message = self._format_sell_msg(msg)
+        elif msg_type in [RPCMessageType.EXIT, RPCMessageType.EXIT_FILL]:
+            message = self._format_exit_msg(msg)
 
-        elif msg_type in (RPCMessageType.BUY_CANCEL, RPCMessageType.SELL_CANCEL):
-            msg['message_side'] = 'buy' if msg_type == RPCMessageType.BUY_CANCEL else 'sell'
-            msg['type'] = 'buy_cancel' if msg_type == RPCMessageType.BUY_CANCEL else 'sell_cancel'
+        elif msg_type in (RPCMessageType.ENTRY_CANCEL, RPCMessageType.EXIT_CANCEL):
+            msg['message_side'] = 'enter' if msg_type == RPCMessageType.ENTRY_CANCEL else 'exit'
+            msg['type'] = 'entry_cancel' if msg_type == RPCMessageType.ENTRY_CANCEL else 'exit_cancel'
             message = ("\N{WARNING SIGN} *{exchange}:* "
                        "Cancelling open {message_side} Order for {pair} (#{trade_id}). "
                        "Reason: {reason}.".format(**msg))
 
-        elif msg_type == RPCMessageType.BUY_CANCEL_STRATEGY:
-            msg['type'] = 'buy_cancel_strategy'
-            msg['message_side'] = 'buy'
+        elif msg_type == RPCMessageType.ENTRY_CANCEL_STRATEGY:
+            msg['type'] = 'entry_cancel_strategy'
+            msg['message_side'] = 'enter'
             message = ("\N{WARNING SIGN} *{exchange}:* "
                        "Cancelling open {message_side} Order for {pair} (#{trade_id}). "
                        "Reason: {reason}.".format(**msg))
 
-        elif msg_type in [RPCMessageType.SELL_HOLD]:
-            message = self._format_sell_hold_msg(msg)
+        elif msg_type in [RPCMessageType.EXIT_HOLD]:
+            message = self._format_exit_hold_msg(msg)
 
         else:
             return None
@@ -152,8 +152,8 @@ class Mqtt(RPCHandler):
         message = json.dumps(results)        
         return message
 
-    def _format_buy_msg(self, msg: Dict[str, Any]) -> str:
-        is_fill = msg['type'] == RPCMessageType.BUY_FILL
+    def _format_entry_msg(self, msg: Dict[str, Any]) -> str:
+        is_fill = msg['type'] == RPCMessageType.ENTRY_FILL
         if self._rpc._fiat_converter:
             msg['stake_amount_fiat'] = self._rpc._fiat_converter.convert_amount(
             msg['stake_amount'], msg['stake_currency'], msg['fiat_currency'])
@@ -162,17 +162,17 @@ class Mqtt(RPCHandler):
 
         if is_fill:
             open_rate = msg['open_rate']
-            type = 'buy_fill'            
+            type = 'entry_fill'            
         else:
             open_rate = msg['limit']
-            type = 'buy'
+            type = 'entry'
 
         msg['type'] = type
 
         message = {
             'trade_id': msg['trade_id'],
             'type': type,
-            'buy_tag': msg['buy_tag'],
+            'entry_tag': msg['enter_tag'],
             'exchange': msg['exchange'],
             'pair': msg['pair'],
             'open_rate': open_rate,
@@ -184,21 +184,21 @@ class Mqtt(RPCHandler):
 
         return json.dumps(message)
 
-    def _format_sell_msg(self, msg: Dict[str, Any]) -> str:
-        is_fill = msg['type'] == RPCMessageType.SELL_FILL
+    def _format_exit_msg(self, msg: Dict[str, Any]) -> str:
+        is_fill = msg['type'] == RPCMessageType.EXIT_FILL
         msg['amount'] = round(msg['amount'], 8)
         msg['profit_percent'] = round(msg['profit_ratio'] * 100, 2)
         msg['duration'] = msg['close_date'].replace(microsecond=0) - msg['open_date'].replace(microsecond=0)
         msg['duration_min'] = msg['duration'].total_seconds() / 60
-        msg['buy_tag'] = msg['buy_tag'] if "buy_tag" in msg.keys() else None
+        msg['enter_tag'] = msg['enter_tag'] if "enter_tag" in msg.keys() else None
         msg['min_ratio'] = round(msg['min_ratio'] * 100., 2)
         msg['max_ratio'] = round(msg['max_ratio'] * 100, 2)
-        msg['type'] = 'sell'
+        msg['type'] = 'exit'
 
         if is_fill:
-            type = 'sell_fill'
+            type = 'exit_fill'
         else:
-            type = 'sell'        
+            type = 'exit'        
 
         msg['type'] = type
 
@@ -226,7 +226,7 @@ class Mqtt(RPCHandler):
         return json.dumps(mesage)      
 
 
-    def _format_sell_hold_msg(self, msg: Dict[str, Any]) -> str:
-        msg['type'] = 'sell_hold'
+    def _format_exit_hold_msg(self, msg: Dict[str, Any]) -> str:
+        msg['type'] = 'exit_hold'
         msg['bot_name'] = self.bot_name
         return json.dumps(msg)

@@ -137,7 +137,7 @@ class RPC:
                                                   ) if 'timeframe' in config else 0,
             'exchange': config['exchange']['name'],
             'strategy': config['strategy'],
-            'forcebuy_enabled': config.get('forcebuy_enable', False),
+            'force_entry_enable': config.get('force_entry_enable', False),
             'exit_pricing': config.get('exit_pricing', {}),
             'entry_pricing': config.get('entry_pricing', {}),
             'state': str(botstate),
@@ -198,7 +198,6 @@ class RPC:
 
                 trade_dict = trade.to_json()
                 trade_dict.update(dict(
-                    base_currency=self._freqtrade.config['stake_currency'],
                     close_profit=trade.close_profit if trade.close_profit is not None else None,
                     current_rate=current_rate,
                     current_profit=current_profit,  # Deprecated
@@ -224,6 +223,7 @@ class RPC:
     def _rpc_status_table(self, stake_currency: str,
                           fiat_display_currency: str) -> Tuple[List, List, float]:
         trades: List[Trade] = Trade.get_open_trades()
+        nonspot = self._config.get('trading_mode', TradingMode.SPOT) != TradingMode.SPOT
         if not trades:
             raise RPCException('no active trade')
         else:
@@ -238,7 +238,7 @@ class RPC:
                     current_rate = NAN
                 trade_profit = trade.calc_profit(current_rate)
                 profit_str = f'{trade.calc_profit_ratio(current_rate):.2%}'
-                direction_str = 'S' if trade.is_short else 'L'
+                direction_str = ('S' if trade.is_short else 'L') if nonspot else ''
                 if self._fiat_converter:
                     fiat_profit = self._fiat_converter.convert_amount(
                         trade_profit,
@@ -268,7 +268,11 @@ class RPC:
             if self._fiat_converter:
                 profitcol += " (" + fiat_display_currency + ")"
 
-            columns = ['ID L/S', 'Pair', 'Since', profitcol]
+            columns = [
+                'ID L/S' if nonspot else 'ID',
+                'Pair',
+                'Since',
+                profitcol]
             if self._config.get('position_adjustment_enable', False):
                 columns.append('# Entries')
             return trades_list, columns, fiat_profit_sum
@@ -372,33 +376,48 @@ class RPC:
        
         if number is None or number <= 0:
             number = 2
+
+        min_stake_amount = self._freqtrade.exchange.get_min_pair_stake_amount(pairtrade.pair,
+                                                                   pairtrade.open_rate,
+                                                                   pairtrade.stop_loss)
         
-        if (pairtrade.stake_amount / number) < 30:
-            raise RPCException(f"Can't split trade, minimal stake amount > 30")
+        if (pairtrade.stake_amount / number) < min_stake_amount:
+            raise RPCException(f"Can't split trade, minimal stake amount > {min_stake_amount}")
         
         pairtrades_list = []
         for i in range(int(number)):
             new_trade = Trade(
-                    pair=pairtrade.pair,
-                    stake_amount=pairtrade.stake_amount / number,
-                    amount=pairtrade.amount / number,
-                    is_open=True,
-                    amount_requested=pairtrade.amount_requested / number,
-                    fee_open=pairtrade.fee_open,
-                    fee_open_cost=pairtrade.fee_open_cost / number,
-                    fee_open_currency=pairtrade.fee_open_currency,
-                    fee_close=pairtrade.fee_close,
-                    open_rate=pairtrade.open_rate,
-                    open_date=pairtrade.open_date,
-                    exchange=pairtrade.exchange,
-                    open_order_id=pairtrade.open_order_id,
-                    strategy=pairtrade.strategy,
-                    buy_tag=pairtrade.buy_tag,
-                    timeframe=pairtrade.timeframe,
-                    max_rate=pairtrade.max_rate,
-                    min_rate=pairtrade.min_rate,
-                    hold_pct=pairtrade.hold_pct,
-                    trail_pct=pairtrade.trail_pct
+                pair=pairtrade.pair,
+                base_currency=pairtrade.base_currency,
+                stake_currency=pairtrade.stake_currency,
+                stake_amount=pairtrade.stake_amount / number,
+                amount=pairtrade.amount / number,
+                is_open=pairtrade.is_open,
+                amount_requested=pairtrade.amount_requested / number,
+                fee_open=pairtrade.fee_open / number,
+                fee_open_currency=pairtrade.fee_open_currency,
+                fee_open_cost=pairtrade.fee_open_cost / number,
+                fee_close=pairtrade.fee_close / number,
+                open_rate=pairtrade.open_rate,
+                open_rate_requested=pairtrade.open_rate_requested,
+                open_date=pairtrade.open_date,
+                exchange=pairtrade.exchange,
+                open_order_id=pairtrade.open_order_id,
+                strategy=pairtrade.strategy,
+                hold_pct=pairtrade.hold_pct,
+                enter_tag=pairtrade.enter_tag,
+                timeframe=pairtrade.timeframe,
+                leverage=pairtrade.leverage,
+                is_short=pairtrade.is_short,
+                interest_rate=pairtrade.interest_rate,
+                liquidation_price=pairtrade.liquidation_price,
+                trading_mode=pairtrade.trading_mode,
+                funding_fees=pairtrade.funding_fees / number,
+                max_rate=pairtrade.max_rate,
+                min_rate=pairtrade.min_rate,
+                initial_stop_loss=pairtrade.initial_stop_loss,
+                stoploss_order_id=pairtrade.stoploss_order_id,
+                stoploss_last_update=pairtrade.stoploss_last_update,
             )
             #self.update_trade_to_merge(new_trade, pairtrade.open_order_id)
             Trade.query.session.add(new_trade)
@@ -689,13 +708,13 @@ class RPC:
                 return 'losses'
             else:
                 return 'draws'
-        trades = trades = Trade.get_trades([Trade.is_open.is_(False)])
+        trades: List[Trade] = Trade.get_trades([Trade.is_open.is_(False)])
         # Sell reason
-        sell_reasons = {}
+        exit_reasons = {}
         for trade in trades:
-            if trade.sell_reason not in sell_reasons:
-                sell_reasons[trade.sell_reason] = {'wins': 0, 'losses': 0, 'draws': 0}
-            sell_reasons[trade.sell_reason][trade_win_loss(trade)] += 1
+            if trade.exit_reason not in exit_reasons:
+                exit_reasons[trade.exit_reason] = {'wins': 0, 'losses': 0, 'draws': 0}
+            exit_reasons[trade.exit_reason][trade_win_loss(trade)] += 1
 
         # Duration
         dur: Dict[str, List[int]] = {'wins': [], 'draws': [], 'losses': []}
@@ -709,7 +728,7 @@ class RPC:
         losses_dur = sum(dur['losses']) / len(dur['losses']) if len(dur['losses']) > 0 else None
 
         durations = {'wins': wins_dur, 'draws': draws_dur, 'losses': losses_dur}
-        return {'sell_reasons': sell_reasons, 'durations': durations}
+        return {'exit_reasons': exit_reasons, 'durations': durations}
 
     def _rpc_trade_statistics(
             self, stake_currency: str, fiat_display_currency: str,
@@ -979,32 +998,32 @@ class RPC:
         self._freqtrade.config['max_open_trades'] = int(slots)
         return {'result': f'Set amount of slots to {slots}.'}
 
-    def _rpc_forceexit(self, trade_id: str, ordertype: Optional[str] = None) -> Dict[str, str]:
+    def _rpc_force_exit(self, trade_id: str, ordertype: Optional[str] = None) -> Dict[str, str]:
         """
-        Handler for forcesell <id>.
+        Handler for forceexit <id>.
         Sells the given trade at current price
         """
-        def _exec_forcesell(trade: Trade) -> None:
+        def _exec_force_exit(trade: Trade) -> None:
             # Check if there is there is an open order
             fully_canceled = False
             if trade.open_order_id:
                 order = self._freqtrade.exchange.fetch_order(trade.open_order_id, trade.pair)
 
-                if order['side'] == trade.enter_side:
+                if order['side'] == trade.entry_side:
                     fully_canceled = self._freqtrade.handle_cancel_enter(
-                        trade, order, CANCEL_REASON['FORCE_SELL'])
+                        trade, order, CANCEL_REASON['FORCE_EXIT'])
 
                 if order['side'] == trade.exit_side:
                     # Cancel order - so it is placed anew with a fresh price.
-                    self._freqtrade.handle_cancel_exit(trade, order, CANCEL_REASON['FORCE_SELL'])
+                    self._freqtrade.handle_cancel_exit(trade, order, CANCEL_REASON['FORCE_EXIT'])
 
             if not fully_canceled:
                 # Get current rate and execute sell
                 current_rate = self._freqtrade.exchange.get_rate(
                     trade.pair, side='exit', is_short=trade.is_short, refresh=True)
-                exit_check = ExitCheckTuple(exit_type=ExitType.FORCE_SELL)
+                exit_check = ExitCheckTuple(exit_type=ExitType.FORCE_EXIT)
                 order_type = ordertype or self._freqtrade.strategy.order_types.get(
-                    "forceexit", self._freqtrade.strategy.order_types["exit"])
+                    "force_exit", self._freqtrade.strategy.order_types["exit"])
 
                 self._freqtrade.execute_trade_exit(
                     trade, current_rate, exit_check, ordertype=order_type)
@@ -1017,7 +1036,7 @@ class RPC:
             if trade_id == 'all':
                 # Execute sell for all open orders
                 for trade in Trade.get_open_trades():
-                    _exec_forcesell(trade)
+                    _exec_force_exit(trade)
                 Trade.commit()
                 self._freqtrade.wallets.update()
                 return {'result': 'Created sell orders for all open trades.'}
@@ -1027,10 +1046,10 @@ class RPC:
                 trade_filter=[Trade.id == trade_id, Trade.is_open.is_(True), ]
             ).first()
             if not trade:
-                logger.warning('forceexit: Invalid argument received')
+                logger.warning('force_exit: Invalid argument received')
                 raise RPCException('invalid argument')
 
-            _exec_forcesell(trade)
+            _exec_force_exit(trade)
             Trade.commit()
             self._freqtrade.wallets.update()
             return {'result': f'Created sell order for trade {trade_id}.'}
@@ -1039,13 +1058,14 @@ class RPC:
                          order_type: Optional[str] = None,
                          order_side: SignalDirection = SignalDirection.LONG,
                          stake_amount: Optional[float] = None,
-                         enter_tag: Optional[str] = 'forceentry') -> Optional[Trade]:
+                         enter_tag: Optional[str] = 'force_entry') -> Optional[Trade]:
         """
         Handler for forcebuy <asset> <price>
         Buys a pair trade at the given or current price
         """
-        if not self._freqtrade.config.get('forcebuy_enable', False):
-            raise RPCException('Forceentry not enabled.')
+
+        if not self._freqtrade.config.get('force_entry_enable', False):
+            raise RPCException('Force_entry not enabled.')
 
         if self._freqtrade.state != State.RUNNING:
             raise RPCException('trader is not running')
@@ -1086,7 +1106,7 @@ class RPC:
         # execute buy
         if not order_type:
             order_type = self._freqtrade.strategy.order_types.get(
-                'forceentry', self._freqtrade.strategy.order_types['entry'])
+                'force_entry', self._freqtrade.strategy.order_types['entry'])
         if self._freqtrade.execute_entry(pair, stake_amount, price,
                                          ordertype=order_type, trade=trade,
                                          is_short=is_short,
@@ -1096,7 +1116,7 @@ class RPC:
             trade = Trade.get_trades([Trade.is_open.is_(True), Trade.pair == pair]).first()
             return trade
         else:
-            return None
+            raise RPCException(f'Failed to enter position for {pair}.')
 
     def _rpc_delete(self, trade_id: int) -> Dict[str, Union[str, int]]:
         """
@@ -1153,16 +1173,16 @@ class RPC:
         """
         return Trade.get_enter_tag_performance(pair)
 
-    def _rpc_sell_reason_performance(self, pair: Optional[str]) -> List[Dict[str, Any]]:
+    def _rpc_exit_reason_performance(self, pair: Optional[str]) -> List[Dict[str, Any]]:
         """
-        Handler for sell reason performance.
+        Handler for exit reason performance.
         Shows a performance statistic from finished trades
         """
-        return Trade.get_sell_reason_performance(pair)
+        return Trade.get_exit_reason_performance(pair)
 
     def _rpc_mix_tag_performance(self, pair: Optional[str]) -> List[Dict[str, Any]]:
         """
-        Handler for mix tag (enter_tag + sell_reason) performance.
+        Handler for mix tag (enter_tag + exit_reason) performance.
         Shows a performance statistic from finished trades
         """
         mix_tags = Trade.get_mix_tag_performance(pair)
