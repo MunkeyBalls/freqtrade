@@ -616,7 +616,7 @@ class FreqtradeBot(LoggingMixin):
             hold_pct = 0.0
 
         #TODO: Reenable skip strategy wrapper on forcebuy
-        #if buy_tag != 'forcebuy' and not strategy_safe_wrapper(self.strategy.confirm_trade_entry, default_retval=True)(
+        #if enter_tag != 'forcebuy' and not strategy_safe_wrapper(self.strategy.confirm_trade_entry, default_retval=True)(
         amount = (stake_amount / enter_limit_requested) * leverage
         order_type = ordertype or self.strategy.order_types['entry']
 
@@ -626,7 +626,7 @@ class FreqtradeBot(LoggingMixin):
                 time_in_force=time_in_force, current_time=datetime.now(timezone.utc),
                 entry_tag=enter_tag, side=trade_side):
             logger.info(f"User requested abortion of buying {pair}")
-            self._notify_enter_cancel_strategy(pair, buy_tag, enter_limit_requested, order_type, amount)
+            self._notify_enter_cancel_strategy(pair, enter_tag, enter_limit_requested, order_type, amount)
             return False
         order = self.exchange.create_order(
             pair=pair,
