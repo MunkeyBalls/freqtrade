@@ -60,9 +60,6 @@ class Order(_DECL_BASE):
     order_date = Column(DateTime, nullable=True, default=datetime.utcnow)
     order_filled_date = Column(DateTime, nullable=True)
     order_update_date = Column(DateTime, nullable=True)
-    
-    hold_pct = Column(Float, nullable=True, default=0.0)
-    trail_pct = Column(Float, nullable=True, default=0.0)
 
     ft_fee_base = Column(Float, nullable=True)
 
@@ -163,10 +160,7 @@ class Order(_DECL_BASE):
             'order_type': self.order_type,
             'price': self.price,
             'ft_is_entry': self.ft_order_side == entry_side,
-            'remaining': self.remaining,
-            'hold_pct': self.hold_pct,
-            'trail_pct': self.trail_pct
-            
+            'remaining': self.remaining            
         }
 
     def close_bt_order(self, close_date: datetime, trade: 'LocalTrade'):
@@ -479,7 +473,9 @@ class LocalTrade():
             'trading_mode': self.trading_mode,
             'funding_fees': self.funding_fees,
             'open_order_id': self.open_order_id,
-            'orders': orders,
+            'orders': orders,            
+            'hold_pct': self.hold_pct,
+            'trail_pct': self.trail_pct
         }
 
     @staticmethod
@@ -1096,6 +1092,9 @@ class Trade(_DECL_BASE, LocalTrade):
 
     # Futures properties
     funding_fees = Column(Float, nullable=True, default=None)
+
+    hold_pct = Column(Float, nullable=True, default=0.0)
+    trail_pct = Column(Float, nullable=True, default=0.0)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
