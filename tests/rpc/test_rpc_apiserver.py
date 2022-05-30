@@ -13,7 +13,6 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
 from fastapi.testclient import TestClient
-from numpy import isnan
 from requests.auth import _basic_auth_str
 
 from freqtrade.__init__ import __version__
@@ -973,6 +972,7 @@ def test_api_status(botclient, mocker, ticker, fee, markets, is_short,
         'exchange': 'binance',
         'leverage': 1.0,
         'interest_rate': 0.0,
+        'liquidation_price': None,
         'funding_fees': None,
         'trading_mode': ANY,
         'orders': [ANY],
@@ -985,7 +985,7 @@ def test_api_status(botclient, mocker, ticker, fee, markets, is_short,
     assert_response(rc)
     resp_values = rc.json()
     assert len(resp_values) == 4
-    assert isnan(resp_values[0]['profit_abs'])
+    assert resp_values[0]['profit_abs'] is None
 
 
 def test_api_version(botclient):
@@ -1176,6 +1176,7 @@ def test_api_force_entry(botclient, mocker, fee, endpoint):
         'exchange': 'binance',
         'leverage': None,
         'interest_rate': None,
+        'liquidation_price': None,
         'funding_fees': None,
         'trading_mode': 'spot',
         'orders': [],
@@ -1484,7 +1485,7 @@ def test_api_backtesting(botclient, mocker, fee, caplog, tmpdir):
     assert not result['running']
     assert result['status_msg'] == 'Backtest reset'
     ftbot.config['export'] = 'trades'
-    ftbot.config['backtest_cache'] = 'none'
+    ftbot.config['backtest_cache'] = 'day'
     ftbot.config['user_data_dir'] = Path(tmpdir)
     ftbot.config['exportfilename'] = Path(tmpdir) / "backtest_results"
     ftbot.config['exportfilename'].mkdir()
@@ -1557,18 +1558,18 @@ def test_api_backtesting(botclient, mocker, fee, caplog, tmpdir):
 
     ApiServer._bgtask_running = False
 
-    mocker.patch('freqtrade.optimize.backtesting.Backtesting.backtest_one_strategy',
-                 side_effect=DependencyException())
-    rc = client_post(client, f"{BASE_URI}/backtest", data=json.dumps(data))
-    assert log_has("Backtesting caused an error: ", caplog)
-
-    ftbot.config['backtest_cache'] = 'day'
-
     # Rerun backtest (should get previous result)
     rc = client_post(client, f"{BASE_URI}/backtest", data=json.dumps(data))
     assert_response(rc)
     result = rc.json()
     assert log_has_re('Reusing result of previous backtest.*', caplog)
+
+    data['stake_amount'] = 101
+
+    mocker.patch('freqtrade.optimize.backtesting.Backtesting.backtest_one_strategy',
+                 side_effect=DependencyException())
+    rc = client_post(client, f"{BASE_URI}/backtest", data=json.dumps(data))
+    assert log_has("Backtesting caused an error: ", caplog)
 
     # Delete backtesting to avoid leakage since the backtest-object may stick around.
     rc = client_delete(client, f"{BASE_URI}/backtest")

@@ -28,7 +28,8 @@ HYPEROPT_LOSS_BUILTIN = ['ShortTradeDurHyperOptLoss', 'OnlyProfitHyperOptLoss',
                          'SharpeHyperOptLoss', 'SharpeHyperOptLossDaily',
                          'SortinoHyperOptLoss', 'SortinoHyperOptLossDaily',
                          'CalmarHyperOptLoss',
-                         'MaxDrawDownHyperOptLoss', 'ProfitDrawDownHyperOptLoss']
+                         'MaxDrawDownHyperOptLoss', 'MaxDrawDownRelativeHyperOptLoss',
+                         'ProfitDrawDownHyperOptLoss']
 AVAILABLE_PAIRLISTS = ['StaticPairList', 'VolumePairList',
                        'AgeFilter', 'OffsetFilter', 'PerformanceFilter',
                        'PrecisionFilter', 'PriceFilter', 'RangeStabilityFilter',
@@ -310,7 +311,7 @@ CONF_SCHEMA = {
                         'exit_fill': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
-                            'default': 'off'
+                            'default': 'on'
                         },
                         'exit_hold': {
                             'type': 'string',
@@ -320,7 +321,7 @@ CONF_SCHEMA = {
                         'protection_trigger': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
-                            'default': 'off'
+                            'default': 'on'
                         },
                         'protection_trigger_global': {
                             'type': 'string',
@@ -540,6 +541,10 @@ SCHEMA_BACKTEST_REQUIRED = [
     'dataformat_ohlcv',
     'dataformat_trades',
 ]
+SCHEMA_BACKTEST_REQUIRED_FINAL = SCHEMA_BACKTEST_REQUIRED + [
+    'stoploss',
+    'minimal_roi',
+]
 
 SCHEMA_MINIMAL_REQUIRED = [
     'exchange',
@@ -556,6 +561,8 @@ CANCEL_REASON = {
     "ALL_CANCELLED": "cancelled (all unfilled and partially filled open orders cancelled)",
     "CANCELLED_ON_EXCHANGE": "cancelled on exchange",
     "FORCE_EXIT": "forcesold",
+    "REPLACE": "cancelled to be replaced by new limit order",
+    "USER_CANCEL": "user requested order cancel"
 }
 
 # List of pairs with their timeframes
@@ -567,3 +574,4 @@ TradeList = List[List]
 
 LongShort = Literal['long', 'short']
 EntryExit = Literal['entry', 'exit']
+BuySell = Literal['buy', 'sell']

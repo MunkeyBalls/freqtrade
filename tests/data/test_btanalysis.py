@@ -8,14 +8,14 @@ from pandas import DataFrame, DateOffset, Timestamp, to_datetime
 
 from freqtrade.configuration import TimeRange
 from freqtrade.constants import LAST_BT_RESULT_FN
-from freqtrade.data.btanalysis import (BT_DATA_COLUMNS, analyze_trade_parallelism, calculate_cagr,
-                                       calculate_csum, calculate_market_change,
-                                       calculate_max_drawdown, calculate_underwater,
-                                       combine_dataframes_with_mean, create_cum_profit,
+from freqtrade.data.btanalysis import (BT_DATA_COLUMNS, analyze_trade_parallelism,
                                        extract_trades_of_period, get_latest_backtest_filename,
                                        get_latest_hyperopt_file, load_backtest_data,
                                        load_backtest_metadata, load_trades, load_trades_from_db)
 from freqtrade.data.history import load_data, load_pair_history
+from freqtrade.data.metrics import (calculate_cagr, calculate_csum, calculate_market_change,
+                                    calculate_max_drawdown, calculate_underwater,
+                                    combine_dataframes_with_mean, create_cum_profit)
 from freqtrade.exceptions import OperationalException
 from tests.conftest import CURRENT_TEST_STRATEGY, create_mock_trades
 from tests.conftest_trades import MOCK_TRADE_COUNT
@@ -376,3 +376,38 @@ def test_calculate_max_drawdown2():
     df = DataFrame(zip(values[:5], dates[:5]), columns=['profit', 'open_date'])
     with pytest.raises(ValueError, match='No losing trade, therefore no drawdown.'):
         calculate_max_drawdown(df, date_col='open_date', value_col='profit')
+
+
+@pytest.mark.parametrize('profits,relative,highd,lowd,result,result_rel', [
+    ([0.0, -500.0, 500.0, 10000.0, -1000.0], False, 3, 4, 1000.0, 0.090909),
+    ([0.0, -500.0, 500.0, 10000.0, -1000.0], True, 0, 1, 500.0, 0.5),
+
+])
+def test_calculate_max_drawdown_abs(profits, relative, highd, lowd, result, result_rel):
+    """
+    Test case from issue https://github.com/freqtrade/freqtrade/issues/6655
+    [1000, 500,  1000, 11000, 10000] # absolute results
+    [1000, 50%,  0%,   0%,       ~9%]   # Relative drawdowns
+    """
+    init_date = Arrow(2020, 1, 1)
+    dates = [init_date.shift(days=i) for i in range(len(profits))]
+    df = DataFrame(zip(profits, dates), columns=['profit_abs', 'open_date'])
+    # sort by profit and reset index
+    df = df.sort_values('profit_abs').reset_index(drop=True)
+    df1 = df.copy()
+    drawdown, hdate, ldate, hval, lval, drawdown_rel = calculate_max_drawdown(
+        df, date_col='open_date', starting_balance=1000, relative=relative)
+    # Ensure df has not been altered.
+    assert df.equals(df1)
+
+    assert isinstance(drawdown, float)
+    assert isinstance(drawdown_rel, float)
+    assert hdate == init_date.shift(days=highd)
+    assert ldate == init_date.shift(days=lowd)
+
+    # High must be before low
+    assert hdate < ldate
+    # High value must be higher than low value
+    assert hval > lval
+    assert drawdown == result
+    assert pytest.approx(drawdown_rel) == result_rel

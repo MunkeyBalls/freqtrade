@@ -22,7 +22,7 @@ from freqtrade.data.history import get_timerange
 from freqtrade.enums import ExitType, RunMode
 from freqtrade.exceptions import DependencyException, OperationalException
 from freqtrade.exchange.exchange import timeframe_to_next_date
-from freqtrade.misc import get_strategy_run_id
+from freqtrade.optimize.backtest_caching import get_strategy_run_id
 from freqtrade.optimize.backtesting import Backtesting
 from freqtrade.persistence import LocalTrade
 from freqtrade.resolvers import StrategyResolver
@@ -312,6 +312,7 @@ def test_backtesting_init(mocker, default_conf, order_types) -> None:
     get_fee.assert_called()
     assert backtesting.fee == 0.5
     assert not backtesting.strategy.order_types["stoploss_on_exchange"]
+    assert backtesting.strategy.bot_started is True
 
 
 def test_backtesting_init_no_timeframe(mocker, default_conf, caplog) -> None:
@@ -1167,6 +1168,9 @@ def test_backtest_start_multi_strat(default_conf, mocker, caplog, testdatadir):
         'rejected_signals': 20,
         'timedout_entry_orders': 0,
         'timedout_exit_orders': 0,
+        'canceled_trade_entries': 0,
+        'canceled_entry_orders': 0,
+        'replaced_entry_orders': 0,
         'final_balance': 1000,
     })
     mocker.patch('freqtrade.plugins.pairlistmanager.PairListManager.whitelist',
@@ -1279,6 +1283,9 @@ def test_backtest_start_multi_strat_nomock(default_conf, mocker, caplog, testdat
             'rejected_signals': 20,
             'timedout_entry_orders': 0,
             'timedout_exit_orders': 0,
+            'canceled_trade_entries': 0,
+            'canceled_entry_orders': 0,
+            'replaced_entry_orders': 0,
             'final_balance': 1000,
         },
         {
@@ -1288,6 +1295,9 @@ def test_backtest_start_multi_strat_nomock(default_conf, mocker, caplog, testdat
             'rejected_signals': 20,
             'timedout_entry_orders': 0,
             'timedout_exit_orders': 0,
+            'canceled_trade_entries': 0,
+            'canceled_entry_orders': 0,
+            'replaced_entry_orders': 0,
             'final_balance': 1000,
         }
     ])
@@ -1339,6 +1349,39 @@ def test_backtest_start_multi_strat_nomock(default_conf, mocker, caplog, testdat
     assert 'LEFT OPEN TRADES REPORT' in captured.out
     assert '2017-11-14 21:17:00 -> 2017-11-14 22:58:00 | Max open trades : 1' in captured.out
     assert 'STRATEGY SUMMARY' in captured.out
+
+
+@pytest.mark.filterwarnings("ignore:deprecated")
+def test_backtest_start_futures_noliq(default_conf_usdt, mocker,
+                                      caplog, testdatadir, capsys):
+    # Tests detail-data loading
+    default_conf_usdt.update({
+        "trading_mode": "futures",
+        "margin_mode": "isolated",
+        "use_exit_signal": True,
+        "exit_profit_only": False,
+        "exit_profit_offset": 0.0,
+        "ignore_roi_if_entry_signal": False,
+        "strategy": CURRENT_TEST_STRATEGY,
+    })
+    patch_exchange(mocker)
+
+    mocker.patch('freqtrade.plugins.pairlistmanager.PairListManager.whitelist',
+                 PropertyMock(return_value=['HULUMULU/USDT', 'XRP/USDT']))
+    # mocker.patch('freqtrade.optimize.backtesting.Backtesting.backtest', backtestmock)
+
+    patched_configuration_load_config_file(mocker, default_conf_usdt)
+
+    args = [
+        'backtesting',
+        '--config', 'config.json',
+        '--datadir', str(testdatadir),
+        '--strategy-path', str(Path(__file__).parents[1] / 'strategy/strats'),
+        '--timeframe', '1h',
+    ]
+    args = get_args(args)
+    with pytest.raises(OperationalException, match=r"Pairs .* got no leverage tiers available\."):
+        start_backtesting(args)
 
 
 @pytest.mark.filterwarnings("ignore:deprecated")
@@ -1397,6 +1440,9 @@ def test_backtest_start_nomock_futures(default_conf_usdt, mocker,
             'rejected_signals': 20,
             'timedout_entry_orders': 0,
             'timedout_exit_orders': 0,
+            'canceled_trade_entries': 0,
+            'canceled_entry_orders': 0,
+            'replaced_entry_orders': 0,
             'final_balance': 1000,
         },
         {
@@ -1406,6 +1452,9 @@ def test_backtest_start_nomock_futures(default_conf_usdt, mocker,
             'rejected_signals': 20,
             'timedout_entry_orders': 0,
             'timedout_exit_orders': 0,
+            'canceled_trade_entries': 0,
+            'canceled_entry_orders': 0,
+            'replaced_entry_orders': 0,
             'final_balance': 1000,
         }
     ])
@@ -1500,6 +1549,9 @@ def test_backtest_start_multi_strat_nomock_detail(default_conf, mocker,
             'rejected_signals': 20,
             'timedout_entry_orders': 0,
             'timedout_exit_orders': 0,
+            'canceled_trade_entries': 0,
+            'canceled_entry_orders': 0,
+            'replaced_entry_orders': 0,
             'final_balance': 1000,
         },
         {
@@ -1509,6 +1561,9 @@ def test_backtest_start_multi_strat_nomock_detail(default_conf, mocker,
             'rejected_signals': 20,
             'timedout_entry_orders': 0,
             'timedout_exit_orders': 0,
+            'canceled_trade_entries': 0,
+            'canceled_entry_orders': 0,
+            'replaced_entry_orders': 0,
             'final_balance': 1000,
         }
     ])
@@ -1572,6 +1627,9 @@ def test_backtest_start_multi_strat_caching(default_conf, mocker, caplog, testda
         'rejected_signals': 20,
         'timedout_entry_orders': 0,
         'timedout_exit_orders': 0,
+        'canceled_trade_entries': 0,
+        'canceled_entry_orders': 0,
+        'replaced_entry_orders': 0,
         'final_balance': 1000,
     })
     mocker.patch('freqtrade.plugins.pairlistmanager.PairListManager.whitelist',
