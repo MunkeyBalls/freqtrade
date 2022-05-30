@@ -60,6 +60,9 @@ class Order(_DECL_BASE):
     order_date = Column(DateTime, nullable=True, default=datetime.utcnow)
     order_filled_date = Column(DateTime, nullable=True)
     order_update_date = Column(DateTime, nullable=True)
+    
+    hold_pct = Column(Float, nullable=True, default=0.0)
+    trail_pct = Column(Float, nullable=True, default=0.0)
 
     ft_fee_base = Column(Float, nullable=True)
 
@@ -161,6 +164,9 @@ class Order(_DECL_BASE):
             'price': self.price,
             'ft_is_entry': self.ft_order_side == entry_side,
             'remaining': self.remaining,
+            'hold_pct': self.hold_pct,
+            'trail_pct': self.trail_pct
+            
         }
 
     def close_bt_order(self, close_date: datetime, trade: 'LocalTrade'):
@@ -280,6 +286,9 @@ class LocalTrade():
     strategy: str = ''
     enter_tag: Optional[str] = None
     timeframe: Optional[int] = None
+
+    hold_pct: Optional[float] = 0.0
+    trail_pct: Optional[float] = 0.0
 
     trading_mode: TradingMode = TradingMode.SPOT
 
