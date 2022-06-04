@@ -30,8 +30,6 @@ from freqtrade.misc import chunks, plural, round_coin_value
 from freqtrade.persistence import Trade
 from freqtrade.rpc import RPC, RPCException, RPCHandler
 
-from timeit import default_timer as timer
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -100,15 +98,10 @@ class Telegram(RPCHandler):
         Validates the keyboard configuration from telegram config
         section.
         """
-        # self._keyboard: List[List[Union[str, KeyboardButton]]] = [
-        #     ['/daily', '/profit', '/balance'],
-        #     ['/status', '/status table', '/performance'],
-        #     ['/count', '/start', '/stop', '/help']
-        # ]
         self._keyboard: List[List[Union[str, KeyboardButton]]] = [
-            ['/daily', '/start', '/stop', '/help'],
-            ['/stopbuy', '/profit', '/forcebuy'],
-            ['/balance', '/status table', '/performance']
+            ['/daily', '/profit', '/balance'],
+            ['/status', '/status table', '/performance'],
+            ['/stopbuy', '/start', '/stop', '/help']
         ]
         # do not allow commands with mandatory arguments and critical cmds
         # TODO: DRY! - its not good to list all valid cmds here. But otherwise
@@ -120,10 +113,8 @@ class Telegram(RPCHandler):
                                  r'/daily$', r'/daily \d+$', r'/profit$', r'/profit \d+',
                                  r'/stats$', r'/count$', r'/locks$', r'/balance$',
                                  r'/stopbuy$', r'/reload_config$', r'/show_config$',
-                                 r'/logs$', r'/whitelist$', r'/blacklist$', r'/bl_delete$', 
-                                 r'/forcebuy$', r'/help$', r'/version$',
-                                 r'/avg$', r'/merge$', r'/split$', 
-                                 r'/hold$', r'/max_trades$',
+                                 r'/logs$', r'/whitelist$', r'/blacklist$', r'/bl_delete$',                                 
+                                 r'/split$', r'/trail$', r'/hold$', r'/max_trades$',
                                  r'/weekly$', r'/weekly \d+$', r'/monthly$', r'/monthly \d+$',
                                  r'/forcebuy$', r'/forcelong$', r'/forceshort$',
                                  r'/forcesell$', r'/forceexit$',
@@ -147,7 +138,6 @@ class Telegram(RPCHandler):
                 self._keyboard = cust_keyboard
                 logger.info('using custom keyboard from '
                             f'config.json: {self._keyboard}')
-
 
     def _init(self) -> None:
         """
@@ -195,8 +185,6 @@ class Telegram(RPCHandler):
             CommandHandler('health', self._health),
             CommandHandler('help', self._help),
             CommandHandler('version', self._version),
-            CommandHandler('avg', self._avg),
-            CommandHandler('merge', self._merge),
             CommandHandler('split', self._split),
             CommandHandler('hold', self._update_hold),
             CommandHandler('trail', self._update_trail),
@@ -205,7 +193,6 @@ class Telegram(RPCHandler):
         ]
         callbacks = [
             CallbackQueryHandler(self._status_table, pattern='update_status_table'),
-            CallbackQueryHandler(self._avg, pattern='update_avg'),
             CallbackQueryHandler(self._daily, pattern='update_daily'),
             CallbackQueryHandler(self._weekly, pattern='update_weekly'),
             CallbackQueryHandler(self._monthly, pattern='update_monthly'),
@@ -608,52 +595,6 @@ class Telegram(RPCHandler):
             self._send_msg(str(e))
 
     @authorized_only
-    def _avg(self, update: Update, context: CallbackContext) -> None:
-        """
-        Handler for /status table.
-        Returns the current TradeThread status in table format
-        :param bot: telegram bot
-        :param update: message update
-        :return: None
-        """
-        fiat_currency = self._config.get('fiat_display_currency', '')
-        sstake_currency = self._config['stake_currency']
-        # pair = context.args[0] if context.args and len(context.args) > 0 else None
-        pair = context.args[0] if context.args and len(context.args) > 0 else pickle.load( open( "save.p", "rb" ) )
-        if not pair:
-            self._send_msg("Pair not set. -/-avg CCC/SSSS")
-            return
-        try:
-            temp_pair = pair
-            pickle.dump( temp_pair, open( "save.p", "wb" ) )
-            statlist, head, fiat_profit_sum, total_amount, total_average_price, total_profit_percentage = self._rpc._rpc_average(
-                pair, sstake_currency, fiat_currency)
-
-            show_total = not isnan(fiat_profit_sum) and len(statlist) > 1
-            max_trades_per_msg = 50
-            """
-            Calculate the number of messages of 50 trades per message
-            0.99 is used to make sure that there are no extra (empty) messages
-            As an example with 50 trades, there will be int(50/50 + 0.99) = 1 message
-            """
-            messages_count = max(int(len(statlist) / max_trades_per_msg + 0.99), 1)
-            for i in range(0, messages_count):
-                trades = statlist[i * max_trades_per_msg:(i + 1) * max_trades_per_msg]
-                if show_total and i == messages_count - 1:
-                    # append total line
-                    # trades.append(["Average", "", "", f"{fiat_profit_sum:.2f} {total_average_price}"])
-                    trades.append(["Avg :", f"{total_amount}", f"{total_average_price}", f"{total_profit_percentage}"])
-
-                message = tabulate(trades, headers=head, tablefmt='simple')
-                if show_total and i == messages_count - 1:
-                    # insert separators line between Total
-                    lines = message.split("\n")
-                    message = f"{pair}\n"+"\n".join(lines[:-1] + [lines[1]] + [lines[-1]])
-                self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML, reload_able=True, callback_path="update_avg", query=update.callback_query)
-        except RPCException as e:
-            self._send_msg(str(e))
-
-    @authorized_only
     def _split(self, update: Update, context: CallbackContext) -> None:
         id = context.args[0] if context.args and len(context.args) > 0 else None
 
@@ -669,20 +610,6 @@ class Telegram(RPCHandler):
             if id:
                 trade_id_list = self._rpc._rpc_split(id, number) 
                 self._send_msg(f"Trade {id} has been split in {number} resulting in orders: {trade_id_list}.")           
-        except RPCException as e:
-            self._send_msg(str(e))                    
-
-    @authorized_only
-    def _merge(self, update: Update, context: CallbackContext) -> None:
-        pair = context.args[0] if context.args and len(context.args) > 0 else None
-        if not pair:
-            self._send_msg("Pair not set. -/-merge CCC/SSSS")
-            return
-        try:
-            trade_id_list = self._rpc._rpc_merge_average(pair)
-            self._send_msg(f"Trade {trade_id_list} of {pair} have been merged.")
-            for trade_id in trade_id_list:
-                self._rpc._rpc_delete(trade_id)
         except RPCException as e:
             self._send_msg(str(e))
 
@@ -1724,9 +1651,7 @@ class Telegram(RPCHandler):
             "*/version:* `Show version`\n"
 
             "_CustomCommands_\n"
-            "------------\n"
-            "*/avg <pair>:* `DEPRECATED - migrate to position_adjustment_enable`\n"
-            "*/merge <pair> :* `DEPRECATED - migrate to with position_adjustment_enable`\n"
+            "------------\n"            
             "*/split <trade_id> [<n>]:* `DEPRECATED - migrate to position_adjustment_enable`\n"
             "*/reset_trade <trade_id>|all:* `Reset open_date, min and max_rate and stoploss for the given trade or all trades`\n"
             "*/add_lock <trade_id> [<minutes>]:* `Add a pair lock`\n"

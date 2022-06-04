@@ -160,7 +160,7 @@ class Order(_DECL_BASE):
             'order_type': self.order_type,
             'price': self.price,
             'ft_is_entry': self.ft_order_side == entry_side,
-            'remaining': self.remaining            
+            'remaining': self.remaining,          
         }
 
     def close_bt_order(self, close_date: datetime, trade: 'LocalTrade'):
@@ -475,7 +475,7 @@ class LocalTrade():
             'open_order_id': self.open_order_id,
             'orders': orders,            
             'hold_pct': self.hold_pct,
-            'trail_pct': self.trail_pct
+            'trail_pct': self.trail_pct,
         }
 
     @staticmethod

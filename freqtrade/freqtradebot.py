@@ -762,85 +762,8 @@ class FreqtradeBot(LoggingMixin):
 
         pairtrade.trail_pct = pct if pct else 0.0
         
-        Trade.commit()        
-
-    def merge_average_trade(self, pair: str) -> bool:
-        trade_filter = (Trade.is_open.is_(True) & (Trade.pair == pair))
-        pairtrades = Trade.get_trades(trade_filter).order_by(Trade.id).all()
-        if not pairtrades:
-            # raise RPCException(f"No similar {pair} trades to merge.")
-            return False
-        else:
-            trade_open_rate_list = []
-            trade_amount_list = []
-            trade_amount_requested_list = []
-            trade_stake_amount_list = []
-            trade_open_date_list = []
-            trade_fee_open_list = []
-            trade_fee_open_cost_list = []
-            trade_fee_open_currency_list = []
-            trade_fee_close_list = []
-            trade_hold_pct_list = []
-            trade_exchange_list = []
-            trade_open_order_id_list = []
-            trade_strategy_list = []
-            trade_buy_tag_set = set()
-            trade_timeframe_list = []
-            trade_id_list = []
-            trade_minmax_list = []
-
-            for pairtrade in pairtrades:
-                trade_open_rate_list.append(pairtrade.open_rate)
-                trade_amount_list.append(pairtrade.amount)
-                trade_amount_requested_list.append(pairtrade.amount_requested)
-                trade_stake_amount_list.append(pairtrade.stake_amount)
-                trade_open_date_list.append(pairtrade.open_date)
-                trade_fee_open_list.append(pairtrade.fee_open)
-                trade_fee_open_cost_list.append(pairtrade.fee_open_cost),                
-                trade_fee_open_currency_list.append(pairtrade.fee_open_currency),
-                trade_fee_close_list.append(pairtrade.fee_close)
-                trade_exchange_list.append(pairtrade.exchange)
-                trade_open_order_id_list.append(pairtrade.open_order_id)
-                trade_strategy_list.append(pairtrade.strategy)
-                trade_buy_tag_set.add(pairtrade.buy_tag)
-                trade_hold_pct_list.append(pairtrade.hold_pct)
-                trade_timeframe_list.append(pairtrade.timeframe)
-                trade_id_list.append(pairtrade.id)
-                trade_minmax_list.append(pairtrade.min_rate)
-                trade_minmax_list.append(pairtrade.max_rate)
-
-            trade_hold_pct_list = list(filter(None, trade_hold_pct_list))
-            trade_buy_tag_set.discard(None)
-            trade_minmax_list = list(filter(None, trade_minmax_list))
-
-            new_trade = Trade(
-                pair=pair,
-                stake_amount=sum(trade_stake_amount_list),
-                amount=sum(trade_amount_list),
-                is_open=True,
-                amount_requested=sum(filter(None, trade_amount_requested_list)),
-                fee_open=float(sum(trade_fee_open_list) / len(trade_fee_open_list)),
-                fee_open_cost=sum(filter(None, trade_fee_open_cost_list)),
-                fee_open_currency=trade_fee_open_currency_list[-1], # not sure how to handle multiple fee currencies
-                fee_close=float(sum(trade_fee_close_list) / len(trade_fee_close_list)),
-                open_rate=float(sum(trade_stake_amount_list) / sum(trade_amount_list)),
-                open_date=trade_open_date_list[-1],
-                exchange=trade_exchange_list[-1],
-                open_order_id=trade_open_order_id_list[-1],
-                strategy=trade_strategy_list[-1],
-                buy_tag=' '.join(str(e).strip() for e in trade_buy_tag_set),
-                timeframe=trade_timeframe_list[-1],
-                max_rate=max(trade_minmax_list) if len(trade_minmax_list) > 0 else None,
-                min_rate=min(trade_minmax_list) if len(trade_minmax_list) > 0 else None,
-                hold_pct=max(trade_hold_pct_list) if len(trade_hold_pct_list) > 0 else 0
-            )
-
-            self.update_trade_to_merge(new_trade, trade_open_order_id_list[-1])
-            Trade.query.session.add(new_trade)
-            Trade.commit()
-            return True
-
-        return False        
+        Trade.commit()
+              
     def cancel_stoploss_on_exchange(self, trade: Trade) -> Trade:
         # First cancelling stoploss on exchange ...
         if self.strategy.order_types.get('stoploss_on_exchange') and trade.stoploss_order_id:
@@ -1866,55 +1789,7 @@ class FreqtradeBot(LoggingMixin):
             self._notify_enter(trade, order, fill=True)
 
         return False
-
-    def update_trade_to_merge(self, trade: Trade, order_id: str, action_order: Dict[str, Any] = None,
-                           stoploss_order: bool = False) -> bool:
-        if not order_id:
-            logger.warning(f'Orderid for trade {trade} is empty.')
-            return False
-
-        # Update trade with order values
-        logger.info('Found open order for %s', trade)
-        try:
-            order = action_order or self.exchange.fetch_order_or_stoploss_order(order_id,
-                                                                                trade.pair,
-                                                                                stoploss_order)
-        except InvalidOrderException as exception:
-            logger.warning('Unable to fetch order %s: %s', order_id, exception)
-            return False
-
-        trade.update_order(order)
-
-        # Try update
-        try:
-            order['amount'] = trade.amount
-            order['cost'] = trade.stake_amount
-            order['price'] = trade.open_rate
-            order.pop('filled', None)
-            trade.recalc_open_trade_value()
-        except DependencyException as exception:
-            logger.warning("Could not update trade amount: %s", exception)
-
-        if self.exchange.check_order_canceled_empty(order):
-            # Trade has been cancelled on exchange
-            # Handling of this will happen in check_handle_timeout.
-            return True
-        trade.update(order)
-        Trade.commit()
-
-        # Updating wallets when order is closed
-        if not trade.is_open:
-            if not stoploss_order and not trade.open_order_id:
-                self._notify_sell(trade, '', True)
-            self.protections.stop_per_pair(trade.pair)
-            self.protections.global_stop()
-            self.wallets.update()
-        elif not trade.open_order_id:
-            # Buy fill
-            self._notify_buy_fill(trade)
-
-        return False
-        
+      
     def handle_protections(self, pair: str, side: LongShort) -> None:
         prot_trig = self.protections.stop_per_pair(pair, side=side)
         if prot_trig:
