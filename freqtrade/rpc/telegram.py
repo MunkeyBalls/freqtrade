@@ -745,6 +745,8 @@ class Telegram(RPCHandler):
             )
             self._send_msg(message, parse_mode=ParseMode.HTML, reload_able=True,
                            callback_path=val.callback, query=update.callback_query)
+        except RPCException as e:
+            self._send_msg(str(e))
 
     @authorized_only
     def _daily(self, update: Update, context: CallbackContext) -> None:
