@@ -82,8 +82,9 @@ Called before entering a trade, makes it possible to manage your position size w
 ```python
 class AwesomeStrategy(IStrategy):
     def custom_stake_amount(self, pair: str, current_time: datetime, current_rate: float,
-                            proposed_stake: float, min_stake: float, max_stake: float,
-                            entry_tag: Optional[str], side: str, **kwargs) -> float:
+                            proposed_stake: float, min_stake: Optional[float], max_stake: float,
+                            leverage: float, entry_tag: Optional[str], side: str,
+                            **kwargs) -> float:
 
         dataframe, _ = self.dp.get_analyzed_dataframe(pair=pair, timeframe=self.timeframe)
         current_candle = dataframe.iloc[-1].squeeze()
@@ -622,6 +623,7 @@ class AwesomeStrategy(IStrategy):
 
 !!! Warning
     `confirm_trade_exit()` can prevent stoploss exits, causing significant losses as this would ignore stoploss exits.
+    `confirm_trade_exit()` will not be called for Liquidations - as liquidations are forced by the exchange, and therefore cannot be rejected.
 
 ## Adjust trade position
 
@@ -673,9 +675,10 @@ class DigDeeperStrategy(IStrategy):
     max_dca_multiplier = 5.5
 
     # This is called when placing the initial order (opening trade)
-    def custom_stake_amount(self, pair: str, current_time: datetime, current_rate: float,
+def custom_stake_amount(self, pair: str, current_time: datetime, current_rate: float,
                             proposed_stake: float, min_stake: Optional[float], max_stake: float,
-                            entry_tag: Optional[str], side: str, **kwargs) -> float:
+                            leverage: float, entry_tag: Optional[str], side: str,
+                            **kwargs) -> float:
 
         # We need to leave most of the funds for possible further DCA orders
         # This also applies to fixed stakes

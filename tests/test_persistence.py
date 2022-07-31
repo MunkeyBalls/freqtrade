@@ -99,7 +99,7 @@ def test_enter_exit_side(fee, is_short):
 
 
 @pytest.mark.usefixtures("init_persistence")
-def test_set_stop_loss_isolated_liq(fee):
+def test_set_stop_loss_liquidation(fee):
     trade = Trade(
         id=2,
         pair='ADA/USDT',
@@ -115,73 +115,94 @@ def test_set_stop_loss_isolated_liq(fee):
         leverage=2.0,
         trading_mode=margin
     )
-    trade.set_isolated_liq(0.09)
+    trade.set_liquidation_price(0.09)
     assert trade.liquidation_price == 0.09
     assert trade.stop_loss is None
     assert trade.initial_stop_loss is None
 
-    trade._set_stop_loss(0.1, (1.0 / 9.0))
+    trade.adjust_stop_loss(2.0, 0.2, True)
     assert trade.liquidation_price == 0.09
-    assert trade.stop_loss == 0.1
-    assert trade.initial_stop_loss == 0.1
+    assert trade.stop_loss == 1.8
+    assert trade.initial_stop_loss == 1.8
 
-    trade.set_isolated_liq(0.08)
+    trade.set_liquidation_price(0.08)
     assert trade.liquidation_price == 0.08
-    assert trade.stop_loss == 0.1
-    assert trade.initial_stop_loss == 0.1
+    assert trade.stop_loss == 1.8
+    assert trade.initial_stop_loss == 1.8
 
-    trade.set_isolated_liq(0.11)
-    trade._set_stop_loss(0.1, 0)
+    trade.set_liquidation_price(0.11)
+    trade.adjust_stop_loss(2.0, 0.2)
     assert trade.liquidation_price == 0.11
-    assert trade.stop_loss == 0.11
-    assert trade.initial_stop_loss == 0.1
+    # Stoploss does not change from liquidation price
+    assert trade.stop_loss == 1.8
+    assert trade.initial_stop_loss == 1.8
 
     # lower stop doesn't move stoploss
-    trade._set_stop_loss(0.1, 0)
+    trade.adjust_stop_loss(1.8, 0.2)
     assert trade.liquidation_price == 0.11
-    assert trade.stop_loss == 0.11
-    assert trade.initial_stop_loss == 0.1
+    assert trade.stop_loss == 1.8
+    assert trade.initial_stop_loss == 1.8
+
+    # higher stop does move stoploss
+    trade.adjust_stop_loss(2.1, 0.1)
+    assert trade.liquidation_price == 0.11
+    assert pytest.approx(trade.stop_loss) == 1.994999
+    assert trade.initial_stop_loss == 1.8
+    assert trade.stoploss_or_liquidation == trade.stop_loss
 
     trade.stop_loss = None
     trade.liquidation_price = None
     trade.initial_stop_loss = None
+    trade.initial_stop_loss_pct = None
 
-    trade._set_stop_loss(0.07, 0)
+    trade.adjust_stop_loss(2.0, 0.1, True)
     assert trade.liquidation_price is None
-    assert trade.stop_loss == 0.07
-    assert trade.initial_stop_loss == 0.07
+    assert trade.stop_loss == 1.9
+    assert trade.initial_stop_loss == 1.9
+    assert trade.stoploss_or_liquidation == 1.9
 
     trade.is_short = True
     trade.recalc_open_trade_value()
     trade.stop_loss = None
     trade.initial_stop_loss = None
+    trade.initial_stop_loss_pct = None
 
-    trade.set_isolated_liq(0.09)
-    assert trade.liquidation_price == 0.09
+    trade.set_liquidation_price(3.09)
+    assert trade.liquidation_price == 3.09
     assert trade.stop_loss is None
     assert trade.initial_stop_loss is None
 
-    trade._set_stop_loss(0.08, (1.0 / 9.0))
-    assert trade.liquidation_price == 0.09
-    assert trade.stop_loss == 0.08
-    assert trade.initial_stop_loss == 0.08
+    trade.adjust_stop_loss(2.0, 0.2)
+    assert trade.liquidation_price == 3.09
+    assert trade.stop_loss == 2.2
+    assert trade.initial_stop_loss == 2.2
+    assert trade.stoploss_or_liquidation == 2.2
 
-    trade.set_isolated_liq(0.1)
-    assert trade.liquidation_price == 0.1
-    assert trade.stop_loss == 0.08
-    assert trade.initial_stop_loss == 0.08
+    trade.set_liquidation_price(3.1)
+    assert trade.liquidation_price == 3.1
+    assert trade.stop_loss == 2.2
+    assert trade.initial_stop_loss == 2.2
+    assert trade.stoploss_or_liquidation == 2.2
 
-    trade.set_isolated_liq(0.07)
-    trade._set_stop_loss(0.1, (1.0 / 8.0))
-    assert trade.liquidation_price == 0.07
-    assert trade.stop_loss == 0.07
-    assert trade.initial_stop_loss == 0.08
+    trade.set_liquidation_price(3.8)
+    assert trade.liquidation_price == 3.8
+    # Stoploss does not change from liquidation price
+    assert trade.stop_loss == 2.2
+    assert trade.initial_stop_loss == 2.2
 
     # Stop doesn't move stop higher
-    trade._set_stop_loss(0.1, (1.0 / 9.0))
-    assert trade.liquidation_price == 0.07
-    assert trade.stop_loss == 0.07
-    assert trade.initial_stop_loss == 0.08
+    trade.adjust_stop_loss(2.0, 0.3)
+    assert trade.liquidation_price == 3.8
+    assert trade.stop_loss == 2.2
+    assert trade.initial_stop_loss == 2.2
+
+    # Stoploss does move lower
+    trade.set_liquidation_price(1.5)
+    trade.adjust_stop_loss(1.8, 0.1)
+    assert trade.liquidation_price == 1.5
+    assert pytest.approx(trade.stop_loss) == 1.89
+    assert trade.initial_stop_loss == 2.2
+    assert trade.stoploss_or_liquidation == 1.5
 
 
 @pytest.mark.parametrize('exchange,is_short,lev,minutes,rate,interest,trading_mode', [
@@ -481,6 +502,7 @@ def test_update_limit_order(fee, caplog, limit_buy_order_usdt, limit_sell_order_
 
     trade.open_order_id = 'something'
     oobj = Order.parse_from_ccxt_object(enter_order, 'ADA/USDT', entry_side)
+    trade.orders.append(oobj)
     trade.update_trade(oobj)
     assert trade.open_order_id is None
     assert trade.open_rate == open_rate
@@ -496,11 +518,12 @@ def test_update_limit_order(fee, caplog, limit_buy_order_usdt, limit_sell_order_
     trade.open_order_id = 'something'
     time_machine.move_to("2022-03-31 21:45:05 +00:00")
     oobj = Order.parse_from_ccxt_object(exit_order, 'ADA/USDT', exit_side)
+    trade.orders.append(oobj)
     trade.update_trade(oobj)
 
     assert trade.open_order_id is None
     assert trade.close_rate == close_rate
-    assert trade.close_profit == profit
+    assert pytest.approx(trade.close_profit) == profit
     assert trade.close_date is not None
     assert log_has_re(f"LIMIT_{exit_side.upper()} has been fulfilled for "
                       r"Trade\(id=2, pair=ADA/USDT, amount=30.00000000, "
@@ -529,6 +552,7 @@ def test_update_market_order(market_buy_order_usdt, market_sell_order_usdt, fee,
 
     trade.open_order_id = 'something'
     oobj = Order.parse_from_ccxt_object(market_buy_order_usdt, 'ADA/USDT', 'buy')
+    trade.orders.append(oobj)
     trade.update_trade(oobj)
     assert trade.open_order_id is None
     assert trade.open_rate == 2.0
@@ -543,10 +567,11 @@ def test_update_market_order(market_buy_order_usdt, market_sell_order_usdt, fee,
     trade.is_open = True
     trade.open_order_id = 'something'
     oobj = Order.parse_from_ccxt_object(market_sell_order_usdt, 'ADA/USDT', 'sell')
+    trade.orders.append(oobj)
     trade.update_trade(oobj)
     assert trade.open_order_id is None
     assert trade.close_rate == 2.2
-    assert trade.close_profit == round(0.0945137157107232, 8)
+    assert pytest.approx(trade.close_profit) == 0.094513715710723
     assert trade.close_date is not None
     assert log_has_re(r"MARKET_SELL has been fulfilled for Trade\(id=1, "
                       r"pair=ADA/USDT, amount=30.00000000, is_short=False, leverage=1.0, "
@@ -624,14 +649,41 @@ def test_trade_close(limit_buy_order_usdt, limit_sell_order_usdt, fee):
         open_date=datetime.now(tz=timezone.utc) - timedelta(minutes=10),
         interest_rate=0.0005,
         exchange='binance',
-        trading_mode=margin
+        trading_mode=margin,
+        leverage=1.0,
     )
+    trade.orders.append(Order(
+        ft_order_side=trade.entry_side,
+        order_id=f'{trade.pair}-{trade.entry_side}-{trade.open_date}',
+        ft_pair=trade.pair,
+        amount=trade.amount,
+        filled=trade.amount,
+        remaining=0,
+        price=trade.open_rate,
+        average=trade.open_rate,
+        status="closed",
+        order_type="limit",
+        side=trade.entry_side,
+    ))
+    trade.orders.append(Order(
+        ft_order_side=trade.exit_side,
+        order_id=f'{trade.pair}-{trade.exit_side}-{trade.open_date}',
+        ft_pair=trade.pair,
+        amount=trade.amount,
+        filled=trade.amount,
+        remaining=0,
+        price=2.2,
+        average=2.2,
+        status="closed",
+        order_type="limit",
+        side=trade.exit_side,
+         ))
     assert trade.close_profit is None
     assert trade.close_date is None
     assert trade.is_open is True
     trade.close(2.2)
     assert trade.is_open is False
-    assert trade.close_profit == round(0.0945137157107232, 8)
+    assert pytest.approx(trade.close_profit) == 0.094513715
     assert trade.close_date is not None
 
     new_date = arrow.Arrow(2020, 2, 2, 15, 6, 1).datetime,
@@ -1506,26 +1558,26 @@ def test_adjust_stop_loss(fee):
 
     # Get percent of profit with a custom rate (Higher than open rate)
     trade.adjust_stop_loss(1.3, -0.1)
-    assert round(trade.stop_loss, 8) == 1.17
+    assert pytest.approx(trade.stop_loss) == 1.17
     assert trade.stop_loss_pct == -0.1
     assert trade.initial_stop_loss == 0.95
     assert trade.initial_stop_loss_pct == -0.05
 
     # current rate lower again ... should not change
     trade.adjust_stop_loss(1.2, 0.1)
-    assert round(trade.stop_loss, 8) == 1.17
+    assert pytest.approx(trade.stop_loss) == 1.17
     assert trade.initial_stop_loss == 0.95
     assert trade.initial_stop_loss_pct == -0.05
 
     # current rate higher... should raise stoploss
     trade.adjust_stop_loss(1.4, 0.1)
-    assert round(trade.stop_loss, 8) == 1.26
+    assert pytest.approx(trade.stop_loss) == 1.26
     assert trade.initial_stop_loss == 0.95
     assert trade.initial_stop_loss_pct == -0.05
 
     #  Initial is true but stop_loss set - so doesn't do anything
     trade.adjust_stop_loss(1.7, 0.1, True)
-    assert round(trade.stop_loss, 8) == 1.26
+    assert pytest.approx(trade.stop_loss) == 1.26
     assert trade.initial_stop_loss == 0.95
     assert trade.initial_stop_loss_pct == -0.05
     assert trade.stop_loss_pct == -0.1
@@ -1578,9 +1630,10 @@ def test_adjust_stop_loss_short(fee):
     assert trade.initial_stop_loss == 1.05
     assert trade.initial_stop_loss_pct == -0.05
     assert trade.stop_loss_pct == -0.1
-    trade.set_isolated_liq(0.63)
+    # Liquidation price is lower than stoploss - so liquidation would trigger first.
+    trade.set_liquidation_price(0.63)
     trade.adjust_stop_loss(0.59, -0.1)
-    assert trade.stop_loss == 0.63
+    assert trade.stop_loss == 0.649
     assert trade.liquidation_price == 0.63
 
 
@@ -1978,10 +2031,10 @@ def test_stoploss_reinitialization_short(default_conf, fee):
     assert trade_adj.initial_stop_loss == 1.01
     assert trade_adj.initial_stop_loss_pct == -0.05
     # Stoploss can't go above liquidation price
-    trade_adj.set_isolated_liq(0.985)
+    trade_adj.set_liquidation_price(0.985)
     trade.adjust_stop_loss(0.9799, -0.05)
-    assert trade_adj.stop_loss == 0.985
-    assert trade_adj.stop_loss == 0.985
+    assert trade_adj.stop_loss == 0.989699
+    assert trade_adj.liquidation_price == 0.985
 
 
 def test_update_fee(fee):
