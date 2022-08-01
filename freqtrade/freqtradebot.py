@@ -1609,7 +1609,7 @@ class FreqtradeBot(LoggingMixin):
             'pair': trade.pair,
             'current_profit_ratio': current_profit_ratio,
             'rate': rate,
-            'entry_tag': trade.entry_tag,
+            'enter_tag': trade.enter_tag,
             'exit_reason': exit_reason
         }
         
