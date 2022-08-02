@@ -14,7 +14,7 @@ PROCESS_THROTTLE_SECS = 5  # sec
 HYPEROPT_EPOCH = 100  # epochs
 RETRY_TIMEOUT = 30  # sec
 TIMEOUT_UNITS = ['minutes', 'seconds']
-EXPORT_OPTIONS = ['none', 'trades']
+EXPORT_OPTIONS = ['none', 'trades', 'signals']
 DEFAULT_DB_PROD_URL = 'sqlite:///tradesv3.sqlite'
 DEFAULT_DB_DRYRUN_URL = 'sqlite:///tradesv3.dryrun.sqlite'
 UNLIMITED_STAKE_AMOUNT = 'unlimited'
@@ -28,7 +28,8 @@ HYPEROPT_LOSS_BUILTIN = ['ShortTradeDurHyperOptLoss', 'OnlyProfitHyperOptLoss',
                          'SharpeHyperOptLoss', 'SharpeHyperOptLossDaily',
                          'SortinoHyperOptLoss', 'SortinoHyperOptLossDaily',
                          'CalmarHyperOptLoss',
-                         'MaxDrawDownHyperOptLoss', 'ProfitDrawDownHyperOptLoss']
+                         'MaxDrawDownHyperOptLoss', 'MaxDrawDownRelativeHyperOptLoss',
+                         'ProfitDrawDownHyperOptLoss']
 AVAILABLE_PAIRLISTS = ['StaticPairList', 'VolumePairList',
                        'AgeFilter', 'OffsetFilter', 'PerformanceFilter',
                        'PrecisionFilter', 'PriceFilter', 'RangeStabilityFilter',
@@ -310,7 +311,7 @@ CONF_SCHEMA = {
                         'exit_fill': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
-                            'default': 'off'
+                            'default': 'on'
                         },
                         'exit_hold': {
                             'type': 'string',
@@ -320,9 +321,17 @@ CONF_SCHEMA = {
                         'protection_trigger': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
-                            'default': 'off'
+                            'default': 'on'
                         },
                         'protection_trigger_global': {
+                            'type': 'string',
+                            'enum': TELEGRAM_SETTING_OPTIONS,
+                        },
+                        'show_candle': {
+                            'type': 'string',
+                            'enum': ['off', 'ohlc'],
+                        },
+                        'strategy_msg': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
                         },
@@ -412,6 +421,47 @@ CONF_SCHEMA = {
                 'webhookexitfill': {'type': 'object'},
                 'webhookstatus': {'type': 'object'},
             },
+        },
+        'discord': {
+            'type': 'object',
+            'properties': {
+                'enabled': {'type': 'boolean'},
+                'webhook_url': {'type': 'string'},
+                "exit_fill": {
+                    'type': 'array', 'items': {'type': 'object'},
+                    'default': [
+                        {"Trade ID": "{trade_id}"},
+                        {"Exchange": "{exchange}"},
+                        {"Pair": "{pair}"},
+                        {"Direction": "{direction}"},
+                        {"Open rate": "{open_rate}"},
+                        {"Close rate": "{close_rate}"},
+                        {"Amount": "{amount}"},
+                        {"Open date": "{open_date:%Y-%m-%d %H:%M:%S}"},
+                        {"Close date": "{close_date:%Y-%m-%d %H:%M:%S}"},
+                        {"Profit": "{profit_amount} {stake_currency}"},
+                        {"Profitability": "{profit_ratio:.2%}"},
+                        {"Enter tag": "{enter_tag}"},
+                        {"Exit Reason": "{exit_reason}"},
+                        {"Strategy": "{strategy}"},
+                        {"Timeframe": "{timeframe}"},
+                    ]
+                },
+                "entry_fill": {
+                    'type': 'array', 'items': {'type': 'object'},
+                    'default': [
+                        {"Trade ID": "{trade_id}"},
+                        {"Exchange": "{exchange}"},
+                        {"Pair": "{pair}"},
+                        {"Direction": "{direction}"},
+                        {"Open rate": "{open_rate}"},
+                        {"Amount": "{amount}"},
+                        {"Open date": "{open_date:%Y-%m-%d %H:%M:%S}"},
+                        {"Enter tag": "{enter_tag}"},
+                        {"Strategy": "{strategy} {timeframe}"},
+                    ]
+                },
+            }
         },
         'api_server': {
             'type': 'object',
@@ -540,6 +590,10 @@ SCHEMA_BACKTEST_REQUIRED = [
     'dataformat_ohlcv',
     'dataformat_trades',
 ]
+SCHEMA_BACKTEST_REQUIRED_FINAL = SCHEMA_BACKTEST_REQUIRED + [
+    'stoploss',
+    'minimal_roi',
+]
 
 SCHEMA_MINIMAL_REQUIRED = [
     'exchange',
@@ -556,6 +610,8 @@ CANCEL_REASON = {
     "ALL_CANCELLED": "cancelled (all unfilled and partially filled open orders cancelled)",
     "CANCELLED_ON_EXCHANGE": "cancelled on exchange",
     "FORCE_EXIT": "forcesold",
+    "REPLACE": "cancelled to be replaced by new limit order",
+    "USER_CANCEL": "user requested order cancel"
 }
 
 # List of pairs with their timeframes
@@ -567,3 +623,5 @@ TradeList = List[List]
 
 LongShort = Literal['long', 'short']
 EntryExit = Literal['entry', 'exit']
+BuySell = Literal['buy', 'sell']
+MakerTaker = Literal['maker', 'taker']

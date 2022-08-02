@@ -13,8 +13,9 @@ from sqlalchemy import create_engine, text
 from freqtrade import constants
 from freqtrade.enums import TradingMode
 from freqtrade.exceptions import DependencyException, OperationalException
-from freqtrade.persistence import LocalTrade, Order, Trade, clean_dry_run_db, init_db
+from freqtrade.persistence import LocalTrade, Order, Trade, init_db
 from freqtrade.persistence.migrations import get_last_sequence_ids, set_sequence_ids
+from freqtrade.persistence.models import PairLock
 from tests.conftest import create_mock_trades, create_mock_trades_with_leverage, log_has, log_has_re
 
 
@@ -23,7 +24,7 @@ spot, margin, futures = TradingMode.SPOT, TradingMode.MARGIN, TradingMode.FUTURE
 
 def test_init_create_session(default_conf):
     # Check if init create a session
-    init_db(default_conf['db_url'], default_conf['dry_run'])
+    init_db(default_conf['db_url'])
     assert hasattr(Trade, '_session')
     assert 'scoped_session' in type(Trade._session).__name__
 
@@ -35,7 +36,7 @@ def test_init_custom_db_url(default_conf, tmpdir):
 
     default_conf.update({'db_url': f'sqlite:///{filename}'})
 
-    init_db(default_conf['db_url'], default_conf['dry_run'])
+    init_db(default_conf['db_url'])
     assert Path(filename).is_file()
     r = Trade._session.execute(text("PRAGMA journal_mode"))
     assert r.first() == ('wal',)
@@ -44,10 +45,10 @@ def test_init_custom_db_url(default_conf, tmpdir):
 def test_init_invalid_db_url():
     # Update path to a value other than default, but still in-memory
     with pytest.raises(OperationalException, match=r'.*no valid database URL*'):
-        init_db('unknown:///some.url', True)
+        init_db('unknown:///some.url')
 
     with pytest.raises(OperationalException, match=r'Bad db-url.*For in-memory database, pl.*'):
-        init_db('sqlite:///', True)
+        init_db('sqlite:///')
 
 
 def test_init_prod_db(default_conf, mocker):
@@ -56,7 +57,7 @@ def test_init_prod_db(default_conf, mocker):
 
     create_engine_mock = mocker.patch('freqtrade.persistence.models.create_engine', MagicMock())
 
-    init_db(default_conf['db_url'], default_conf['dry_run'])
+    init_db(default_conf['db_url'])
     assert create_engine_mock.call_count == 1
     assert create_engine_mock.mock_calls[0][1][0] == 'sqlite:///tradesv3.sqlite'
 
@@ -69,7 +70,7 @@ def test_init_dryrun_db(default_conf, tmpdir):
         'db_url': f'sqlite:///{filename}'
     })
 
-    init_db(default_conf['db_url'], default_conf['dry_run'])
+    init_db(default_conf['db_url'])
     assert Path(filename).is_file()
 
 
@@ -98,7 +99,7 @@ def test_enter_exit_side(fee, is_short):
 
 
 @pytest.mark.usefixtures("init_persistence")
-def test_set_stop_loss_isolated_liq(fee):
+def test_set_stop_loss_liquidation(fee):
     trade = Trade(
         id=2,
         pair='ADA/USDT',
@@ -114,73 +115,94 @@ def test_set_stop_loss_isolated_liq(fee):
         leverage=2.0,
         trading_mode=margin
     )
-    trade.set_isolated_liq(0.09)
+    trade.set_liquidation_price(0.09)
     assert trade.liquidation_price == 0.09
     assert trade.stop_loss is None
     assert trade.initial_stop_loss is None
 
-    trade._set_stop_loss(0.1, (1.0/9.0))
+    trade.adjust_stop_loss(2.0, 0.2, True)
     assert trade.liquidation_price == 0.09
-    assert trade.stop_loss == 0.1
-    assert trade.initial_stop_loss == 0.1
+    assert trade.stop_loss == 1.8
+    assert trade.initial_stop_loss == 1.8
 
-    trade.set_isolated_liq(0.08)
+    trade.set_liquidation_price(0.08)
     assert trade.liquidation_price == 0.08
-    assert trade.stop_loss == 0.1
-    assert trade.initial_stop_loss == 0.1
+    assert trade.stop_loss == 1.8
+    assert trade.initial_stop_loss == 1.8
 
-    trade.set_isolated_liq(0.11)
-    trade._set_stop_loss(0.1, 0)
+    trade.set_liquidation_price(0.11)
+    trade.adjust_stop_loss(2.0, 0.2)
     assert trade.liquidation_price == 0.11
-    assert trade.stop_loss == 0.11
-    assert trade.initial_stop_loss == 0.1
+    # Stoploss does not change from liquidation price
+    assert trade.stop_loss == 1.8
+    assert trade.initial_stop_loss == 1.8
 
     # lower stop doesn't move stoploss
-    trade._set_stop_loss(0.1, 0)
+    trade.adjust_stop_loss(1.8, 0.2)
     assert trade.liquidation_price == 0.11
-    assert trade.stop_loss == 0.11
-    assert trade.initial_stop_loss == 0.1
+    assert trade.stop_loss == 1.8
+    assert trade.initial_stop_loss == 1.8
+
+    # higher stop does move stoploss
+    trade.adjust_stop_loss(2.1, 0.1)
+    assert trade.liquidation_price == 0.11
+    assert pytest.approx(trade.stop_loss) == 1.994999
+    assert trade.initial_stop_loss == 1.8
+    assert trade.stoploss_or_liquidation == trade.stop_loss
 
     trade.stop_loss = None
     trade.liquidation_price = None
     trade.initial_stop_loss = None
+    trade.initial_stop_loss_pct = None
 
-    trade._set_stop_loss(0.07, 0)
+    trade.adjust_stop_loss(2.0, 0.1, True)
     assert trade.liquidation_price is None
-    assert trade.stop_loss == 0.07
-    assert trade.initial_stop_loss == 0.07
+    assert trade.stop_loss == 1.9
+    assert trade.initial_stop_loss == 1.9
+    assert trade.stoploss_or_liquidation == 1.9
 
     trade.is_short = True
     trade.recalc_open_trade_value()
     trade.stop_loss = None
     trade.initial_stop_loss = None
+    trade.initial_stop_loss_pct = None
 
-    trade.set_isolated_liq(0.09)
-    assert trade.liquidation_price == 0.09
+    trade.set_liquidation_price(3.09)
+    assert trade.liquidation_price == 3.09
     assert trade.stop_loss is None
     assert trade.initial_stop_loss is None
 
-    trade._set_stop_loss(0.08, (1.0/9.0))
-    assert trade.liquidation_price == 0.09
-    assert trade.stop_loss == 0.08
-    assert trade.initial_stop_loss == 0.08
+    trade.adjust_stop_loss(2.0, 0.2)
+    assert trade.liquidation_price == 3.09
+    assert trade.stop_loss == 2.2
+    assert trade.initial_stop_loss == 2.2
+    assert trade.stoploss_or_liquidation == 2.2
 
-    trade.set_isolated_liq(0.1)
-    assert trade.liquidation_price == 0.1
-    assert trade.stop_loss == 0.08
-    assert trade.initial_stop_loss == 0.08
+    trade.set_liquidation_price(3.1)
+    assert trade.liquidation_price == 3.1
+    assert trade.stop_loss == 2.2
+    assert trade.initial_stop_loss == 2.2
+    assert trade.stoploss_or_liquidation == 2.2
 
-    trade.set_isolated_liq(0.07)
-    trade._set_stop_loss(0.1, (1.0/8.0))
-    assert trade.liquidation_price == 0.07
-    assert trade.stop_loss == 0.07
-    assert trade.initial_stop_loss == 0.08
+    trade.set_liquidation_price(3.8)
+    assert trade.liquidation_price == 3.8
+    # Stoploss does not change from liquidation price
+    assert trade.stop_loss == 2.2
+    assert trade.initial_stop_loss == 2.2
 
     # Stop doesn't move stop higher
-    trade._set_stop_loss(0.1, (1.0/9.0))
-    assert trade.liquidation_price == 0.07
-    assert trade.stop_loss == 0.07
-    assert trade.initial_stop_loss == 0.08
+    trade.adjust_stop_loss(2.0, 0.3)
+    assert trade.liquidation_price == 3.8
+    assert trade.stop_loss == 2.2
+    assert trade.initial_stop_loss == 2.2
+
+    # Stoploss does move lower
+    trade.set_liquidation_price(1.5)
+    trade.adjust_stop_loss(1.8, 0.1)
+    assert trade.liquidation_price == 1.5
+    assert pytest.approx(trade.stop_loss) == 1.89
+    assert trade.initial_stop_loss == 2.2
+    assert trade.stoploss_or_liquidation == 1.5
 
 
 @pytest.mark.parametrize('exchange,is_short,lev,minutes,rate,interest,trading_mode', [
@@ -480,6 +502,7 @@ def test_update_limit_order(fee, caplog, limit_buy_order_usdt, limit_sell_order_
 
     trade.open_order_id = 'something'
     oobj = Order.parse_from_ccxt_object(enter_order, 'ADA/USDT', entry_side)
+    trade.orders.append(oobj)
     trade.update_trade(oobj)
     assert trade.open_order_id is None
     assert trade.open_rate == open_rate
@@ -495,11 +518,12 @@ def test_update_limit_order(fee, caplog, limit_buy_order_usdt, limit_sell_order_
     trade.open_order_id = 'something'
     time_machine.move_to("2022-03-31 21:45:05 +00:00")
     oobj = Order.parse_from_ccxt_object(exit_order, 'ADA/USDT', exit_side)
+    trade.orders.append(oobj)
     trade.update_trade(oobj)
 
     assert trade.open_order_id is None
     assert trade.close_rate == close_rate
-    assert trade.close_profit == profit
+    assert pytest.approx(trade.close_profit) == profit
     assert trade.close_date is not None
     assert log_has_re(f"LIMIT_{exit_side.upper()} has been fulfilled for "
                       r"Trade\(id=2, pair=ADA/USDT, amount=30.00000000, "
@@ -528,6 +552,7 @@ def test_update_market_order(market_buy_order_usdt, market_sell_order_usdt, fee,
 
     trade.open_order_id = 'something'
     oobj = Order.parse_from_ccxt_object(market_buy_order_usdt, 'ADA/USDT', 'buy')
+    trade.orders.append(oobj)
     trade.update_trade(oobj)
     assert trade.open_order_id is None
     assert trade.open_rate == 2.0
@@ -542,10 +567,11 @@ def test_update_market_order(market_buy_order_usdt, market_sell_order_usdt, fee,
     trade.is_open = True
     trade.open_order_id = 'something'
     oobj = Order.parse_from_ccxt_object(market_sell_order_usdt, 'ADA/USDT', 'sell')
+    trade.orders.append(oobj)
     trade.update_trade(oobj)
     assert trade.open_order_id is None
     assert trade.close_rate == 2.2
-    assert trade.close_profit == round(0.0945137157107232, 8)
+    assert pytest.approx(trade.close_profit) == 0.094513715710723
     assert trade.close_date is not None
     assert log_has_re(r"MARKET_SELL has been fulfilled for Trade\(id=1, "
                       r"pair=ADA/USDT, amount=30.00000000, is_short=False, leverage=1.0, "
@@ -605,9 +631,9 @@ def test_calc_open_close_trade_price(
     trade.close_rate = 2.2
     trade.recalc_open_trade_value()
     assert isclose(trade._calc_open_trade_value(), open_value)
-    assert isclose(trade.calc_close_trade_value(), close_value)
-    assert isclose(trade.calc_profit(), round(profit, 8))
-    assert pytest.approx(trade.calc_profit_ratio()) == profit_ratio
+    assert isclose(trade.calc_close_trade_value(trade.close_rate), close_value)
+    assert isclose(trade.calc_profit(trade.close_rate), round(profit, 8))
+    assert pytest.approx(trade.calc_profit_ratio(trade.close_rate)) == profit_ratio
 
 
 @pytest.mark.usefixtures("init_persistence")
@@ -623,14 +649,41 @@ def test_trade_close(limit_buy_order_usdt, limit_sell_order_usdt, fee):
         open_date=datetime.now(tz=timezone.utc) - timedelta(minutes=10),
         interest_rate=0.0005,
         exchange='binance',
-        trading_mode=margin
+        trading_mode=margin,
+        leverage=1.0,
     )
+    trade.orders.append(Order(
+        ft_order_side=trade.entry_side,
+        order_id=f'{trade.pair}-{trade.entry_side}-{trade.open_date}',
+        ft_pair=trade.pair,
+        amount=trade.amount,
+        filled=trade.amount,
+        remaining=0,
+        price=trade.open_rate,
+        average=trade.open_rate,
+        status="closed",
+        order_type="limit",
+        side=trade.entry_side,
+    ))
+    trade.orders.append(Order(
+        ft_order_side=trade.exit_side,
+        order_id=f'{trade.pair}-{trade.exit_side}-{trade.open_date}',
+        ft_pair=trade.pair,
+        amount=trade.amount,
+        filled=trade.amount,
+        remaining=0,
+        price=2.2,
+        average=2.2,
+        status="closed",
+        order_type="limit",
+        side=trade.exit_side,
+         ))
     assert trade.close_profit is None
     assert trade.close_date is None
     assert trade.is_open is True
     trade.close(2.2)
     assert trade.is_open is False
-    assert trade.close_profit == round(0.0945137157107232, 8)
+    assert pytest.approx(trade.close_profit) == 0.094513715
     assert trade.close_date is not None
 
     new_date = arrow.Arrow(2020, 2, 2, 15, 6, 1).datetime,
@@ -659,7 +712,7 @@ def test_calc_close_trade_price_exception(limit_buy_order_usdt, fee):
     trade.open_order_id = 'something'
     oobj = Order.parse_from_ccxt_object(limit_buy_order_usdt, 'ADA/USDT', 'buy')
     trade.update_trade(oobj)
-    assert trade.calc_close_trade_value() == 0.0
+    assert trade.calc_close_trade_value(trade.close_rate) == 0.0
 
 
 @pytest.mark.usefixtures("init_persistence")
@@ -812,7 +865,7 @@ def test_calc_close_trade_price(
         funding_fees=funding_fees
     )
     trade.open_order_id = 'close_trade'
-    assert round(trade.calc_close_trade_value(rate=close_rate, fee=fee_rate), 8) == result
+    assert round(trade.calc_close_trade_value(rate=close_rate), 8) == result
 
 
 @pytest.mark.parametrize(
@@ -883,6 +936,17 @@ def test_calc_close_trade_price(
         ('binance', False, 3, 2.2, 0.0025, 4.684999, 0.23366583, futures, -1),
         ('binance', True, 1, 2.2, 0.0025, -7.315, -0.12222222, futures, -1),
         ('binance', True, 3, 2.2, 0.0025, -7.315, -0.36666666, futures, -1),
+
+        # FUTURES, funding_fee=0
+        ('binance', False, 1, 2.1, 0.0025, 2.6925, 0.04476309, futures, 0),
+        ('binance', False, 3, 2.1, 0.0025, 2.6925, 0.13428928, futures, 0),
+        ('binance', True, 1, 2.1, 0.0025, -3.3074999, -0.05526316, futures, 0),
+        ('binance', True, 3, 2.1, 0.0025, -3.3074999, -0.16578947, futures, 0),
+
+        ('binance', False, 1, 1.9, 0.0025, -3.2925, -0.05473815, futures, 0),
+        ('binance', False, 3, 1.9, 0.0025, -3.2925, -0.16421446, futures, 0),
+        ('binance', True, 1, 1.9, 0.0025, 2.7075, 0.0452381, futures, 0),
+        ('binance', True, 3, 1.9, 0.0025, 2.7075, 0.13571429, futures, 0),
     ])
 @pytest.mark.usefixtures("init_persistence")
 def test_calc_profit(
@@ -1128,56 +1192,6 @@ def test_calc_profit(
     assert pytest.approx(trade.calc_profit_ratio(rate=close_rate)) == round(profit_ratio, 8)
 
 
-@pytest.mark.usefixtures("init_persistence")
-def test_clean_dry_run_db(default_conf, fee):
-
-    # Simulate dry_run entries
-    trade = Trade(
-        pair='ADA/USDT',
-        stake_amount=0.001,
-        amount=123.0,
-        fee_open=fee.return_value,
-        fee_close=fee.return_value,
-        open_rate=0.123,
-        exchange='binance',
-        open_order_id='dry_run_buy_12345'
-    )
-    Trade.query.session.add(trade)
-
-    trade = Trade(
-        pair='ETC/BTC',
-        stake_amount=0.001,
-        amount=123.0,
-        fee_open=fee.return_value,
-        fee_close=fee.return_value,
-        open_rate=0.123,
-        exchange='binance',
-        open_order_id='dry_run_sell_12345'
-    )
-    Trade.query.session.add(trade)
-
-    # Simulate prod entry
-    trade = Trade(
-        pair='ETC/BTC',
-        stake_amount=0.001,
-        amount=123.0,
-        fee_open=fee.return_value,
-        fee_close=fee.return_value,
-        open_rate=0.123,
-        exchange='binance',
-        open_order_id='prod_buy_12345'
-    )
-    Trade.query.session.add(trade)
-
-    # We have 3 entries: 2 dry_run, 1 prod
-    assert len(Trade.query.filter(Trade.open_order_id.isnot(None)).all()) == 3
-
-    clean_dry_run_db()
-
-    # We have now only the prod
-    assert len(Trade.query.filter(Trade.open_order_id.isnot(None)).all()) == 1
-
-
 def test_migrate_new(mocker, default_conf, fee, caplog):
     """
     Test Database migration (starting with new pairformat)
@@ -1238,7 +1252,7 @@ def test_migrate_new(mocker, default_conf, fee, caplog):
                           0.00258580, {stake}, {amount},
                           '2019-11-28 12:44:24.000000',
                           0.0, 0.0, 0.0, '5m',
-                          'buy_order', 'stop_order_id222')
+                          'buy_order', 'dry_stop_order_id222')
                           """.format(fee=fee.return_value,
                                      stake=default_conf.get("stake_amount"),
                                      amount=amount
@@ -1264,7 +1278,7 @@ def test_migrate_new(mocker, default_conf, fee, caplog):
             'buy',
             'ETC/BTC',
             0,
-            'buy_order',
+            'dry_buy_order',
             'closed',
             'ETC/BTC',
             'limit',
@@ -1277,11 +1291,43 @@ def test_migrate_new(mocker, default_conf, fee, caplog):
         ),
         (
             1,
+            'buy',
+            'ETC/BTC',
+            1,
+            'dry_buy_order22',
+            'canceled',
+            'ETC/BTC',
+            'limit',
+            'buy',
+            0.00258580,
+            {amount},
+            {amount},
+            0,
+            {amount * 0.00258580}
+        ),
+         (
+            1,
             'stoploss',
             'ETC/BTC',
+            1,
+            'dry_stop_order_id11X',
+            'canceled',
+            'ETC/BTC',
+            'limit',
+            'sell',
+            0.00258580,
+            {amount},
+            {amount},
             0,
-            'stop_order_id222',
-            'closed',
+            {amount * 0.00258580}
+        ),
+        (
+            1,
+            'stoploss',
+            'ETC/BTC',
+            1,
+            'dry_stop_order_id222',
+            'open',
             'ETC/BTC',
             'limit',
             'sell',
@@ -1309,7 +1355,7 @@ def test_migrate_new(mocker, default_conf, fee, caplog):
 
         connection.execute(text("create table trades_bak1 as select * from trades"))
     # Run init to test migration
-    init_db(default_conf['db_url'], default_conf['dry_run'])
+    init_db(default_conf['db_url'])
 
     assert len(Trade.query.filter(Trade.id == 1).all()) == 1
     trade = Trade.query.filter(Trade.id == 1).first()
@@ -1330,7 +1376,7 @@ def test_migrate_new(mocker, default_conf, fee, caplog):
     assert trade.exit_reason is None
     assert trade.strategy is None
     assert trade.timeframe == '5m'
-    assert trade.stoploss_order_id == 'stop_order_id222'
+    assert trade.stoploss_order_id == 'dry_stop_order_id222'
     assert trade.stoploss_last_update is None
     assert log_has("trying trades_bak1", caplog)
     assert log_has("trying trades_bak2", caplog)
@@ -1340,12 +1386,21 @@ def test_migrate_new(mocker, default_conf, fee, caplog):
     assert trade.close_profit_abs is None
 
     orders = trade.orders
-    assert len(orders) == 2
-    assert orders[0].order_id == 'buy_order'
+    assert len(orders) == 4
+    assert orders[0].order_id == 'dry_buy_order'
     assert orders[0].ft_order_side == 'buy'
 
-    assert orders[1].order_id == 'stop_order_id222'
-    assert orders[1].ft_order_side == 'stoploss'
+    assert orders[-1].order_id == 'dry_stop_order_id222'
+    assert orders[-1].ft_order_side == 'stoploss'
+    assert orders[-1].ft_is_open is True
+
+    assert orders[1].order_id == 'dry_buy_order22'
+    assert orders[1].ft_order_side == 'buy'
+    assert orders[1].ft_is_open is False
+
+    assert orders[2].order_id == 'dry_stop_order_id11X'
+    assert orders[2].ft_order_side == 'stoploss'
+    assert orders[2].ft_is_open is False
 
 
 def test_migrate_too_old(mocker, default_conf, fee, caplog):
@@ -1392,7 +1447,7 @@ def test_migrate_too_old(mocker, default_conf, fee, caplog):
 
     # Run init to test migration
     with pytest.raises(OperationalException, match=r'Your database seems to be very old'):
-        init_db(default_conf['db_url'], default_conf['dry_run'])
+        init_db(default_conf['db_url'])
 
 
 def test_migrate_get_last_sequence_ids():
@@ -1415,16 +1470,65 @@ def test_migrate_set_sequence_ids():
     engine = MagicMock()
     engine.begin = MagicMock()
     engine.name = 'postgresql'
-    set_sequence_ids(engine, 22, 55)
+    set_sequence_ids(engine, 22, 55, 5)
 
     assert engine.begin.call_count == 1
     engine.reset_mock()
     engine.begin.reset_mock()
 
     engine.name = 'somethingelse'
-    set_sequence_ids(engine, 22, 55)
+    set_sequence_ids(engine, 22, 55, 6)
 
     assert engine.begin.call_count == 0
+
+
+def test_migrate_pairlocks(mocker, default_conf, fee, caplog):
+    """
+    Test Database migration (starting with new pairformat)
+    """
+    caplog.set_level(logging.DEBUG)
+    # Always create all columns apart from the last!
+    create_table_old = """CREATE TABLE pairlocks (
+                            id INTEGER NOT NULL,
+                            pair VARCHAR(25) NOT NULL,
+                            reason VARCHAR(255),
+                            lock_time DATETIME NOT NULL,
+                            lock_end_time DATETIME NOT NULL,
+                            active BOOLEAN NOT NULL,
+                            PRIMARY KEY (id)
+                        )
+                                """
+    create_index1 = "CREATE INDEX ix_pairlocks_pair ON pairlocks (pair)"
+    create_index2 = "CREATE INDEX ix_pairlocks_lock_end_time ON pairlocks (lock_end_time)"
+    create_index3 = "CREATE INDEX ix_pairlocks_active ON pairlocks (active)"
+    insert_table_old = """INSERT INTO pairlocks (
+        id, pair, reason, lock_time, lock_end_time, active)
+        VALUES (1, 'ETH/BTC', 'Auto lock', '2021-07-12 18:41:03', '2021-07-11 18:45:00', 1)
+                          """
+    insert_table_old2 = """INSERT INTO pairlocks (
+        id, pair, reason, lock_time, lock_end_time, active)
+        VALUES (2, '*', 'Lock all', '2021-07-12 18:41:03', '2021-07-12 19:00:00', 1)
+                          """
+    engine = create_engine('sqlite://')
+    mocker.patch('freqtrade.persistence.models.create_engine', lambda *args, **kwargs: engine)
+    # Create table using the old format
+    with engine.begin() as connection:
+        connection.execute(text(create_table_old))
+
+        connection.execute(text(insert_table_old))
+        connection.execute(text(insert_table_old2))
+        connection.execute(text(create_index1))
+        connection.execute(text(create_index2))
+        connection.execute(text(create_index3))
+
+    init_db(default_conf['db_url'])
+
+    assert len(PairLock.query.all()) == 2
+    assert len(PairLock.query.filter(PairLock.pair == '*').all()) == 1
+    pairlocks = PairLock.query.filter(PairLock.pair == 'ETH/BTC').all()
+    assert len(pairlocks) == 1
+    pairlocks[0].pair == 'ETH/BTC'
+    pairlocks[0].side == '*'
 
 
 def test_adjust_stop_loss(fee):
@@ -1454,26 +1558,26 @@ def test_adjust_stop_loss(fee):
 
     # Get percent of profit with a custom rate (Higher than open rate)
     trade.adjust_stop_loss(1.3, -0.1)
-    assert round(trade.stop_loss, 8) == 1.17
+    assert pytest.approx(trade.stop_loss) == 1.17
     assert trade.stop_loss_pct == -0.1
     assert trade.initial_stop_loss == 0.95
     assert trade.initial_stop_loss_pct == -0.05
 
     # current rate lower again ... should not change
     trade.adjust_stop_loss(1.2, 0.1)
-    assert round(trade.stop_loss, 8) == 1.17
+    assert pytest.approx(trade.stop_loss) == 1.17
     assert trade.initial_stop_loss == 0.95
     assert trade.initial_stop_loss_pct == -0.05
 
     # current rate higher... should raise stoploss
     trade.adjust_stop_loss(1.4, 0.1)
-    assert round(trade.stop_loss, 8) == 1.26
+    assert pytest.approx(trade.stop_loss) == 1.26
     assert trade.initial_stop_loss == 0.95
     assert trade.initial_stop_loss_pct == -0.05
 
     #  Initial is true but stop_loss set - so doesn't do anything
     trade.adjust_stop_loss(1.7, 0.1, True)
-    assert round(trade.stop_loss, 8) == 1.26
+    assert pytest.approx(trade.stop_loss) == 1.26
     assert trade.initial_stop_loss == 0.95
     assert trade.initial_stop_loss_pct == -0.05
     assert trade.stop_loss_pct == -0.1
@@ -1526,9 +1630,10 @@ def test_adjust_stop_loss_short(fee):
     assert trade.initial_stop_loss == 1.05
     assert trade.initial_stop_loss_pct == -0.05
     assert trade.stop_loss_pct == -0.1
-    trade.set_isolated_liq(0.63)
+    # Liquidation price is lower than stoploss - so liquidation would trigger first.
+    trade.set_liquidation_price(0.63)
     trade.adjust_stop_loss(0.59, -0.1)
-    assert trade.stop_loss == 0.63
+    assert trade.stop_loss == 0.649
     assert trade.liquidation_price == 0.63
 
 
@@ -1926,10 +2031,10 @@ def test_stoploss_reinitialization_short(default_conf, fee):
     assert trade_adj.initial_stop_loss == 1.01
     assert trade_adj.initial_stop_loss_pct == -0.05
     # Stoploss can't go above liquidation price
-    trade_adj.set_isolated_liq(0.985)
+    trade_adj.set_liquidation_price(0.985)
     trade.adjust_stop_loss(0.9799, -0.05)
-    assert trade_adj.stop_loss == 0.985
-    assert trade_adj.stop_loss == 0.985
+    assert trade_adj.stop_loss == 0.989699
+    assert trade_adj.liquidation_price == 0.985
 
 
 def test_update_fee(fee):
@@ -2062,6 +2167,24 @@ def test_get_trades_proxy(fee, use_db, is_short):
     assert len(Trade.get_trades_proxy(open_date=opendate)) == 3
 
     Trade.use_db = True
+
+
+@pytest.mark.usefixtures("init_persistence")
+@pytest.mark.parametrize('is_short', [True, False])
+def test_get_trades__query(fee, is_short):
+    query = Trade.get_trades([])
+    # without orders there should be no join issued.
+    query1 = Trade.get_trades([], include_orders=False)
+
+    assert "JOIN orders" in str(query)
+    assert "JOIN orders" not in str(query1)
+
+    create_mock_trades(fee, is_short)
+    query = Trade.get_trades([])
+    query1 = Trade.get_trades([], include_orders=False)
+
+    assert "JOIN orders" in str(query)
+    assert "JOIN orders" not in str(query1)
 
 
 def test_get_trades_backtest():
@@ -2258,6 +2381,7 @@ def test_Trade_object_idem():
         'get_exit_reason_performance',
         'get_enter_tag_performance',
         'get_mix_tag_performance',
+        'get_trading_volume',
 
     )
 
@@ -2671,3 +2795,23 @@ def test_select_filled_orders(fee):
     orders = trades[4].select_filled_orders('sell')
     assert orders is not None
     assert len(orders) == 0
+
+
+@pytest.mark.usefixtures("init_persistence")
+def test_order_to_ccxt(limit_buy_order_open):
+
+    order = Order.parse_from_ccxt_object(limit_buy_order_open, 'mocked', 'buy')
+    order.query.session.add(order)
+    Order.query.session.commit()
+
+    order_resp = Order.order_by_id(limit_buy_order_open['id'])
+    assert order_resp
+
+    raw_order = order_resp.to_ccxt_object()
+    del raw_order['fee']
+    del raw_order['datetime']
+    del raw_order['info']
+    assert raw_order['stopPrice'] is None
+    del raw_order['stopPrice']
+    del limit_buy_order_open['datetime']
+    assert raw_order == limit_buy_order_open

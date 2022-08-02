@@ -20,6 +20,8 @@ class RPCMessageType(Enum):
     ENTRY_CANCEL_STRATEGY = 'entry_cancel_strategy'    
     EXIT_HOLD = 'exit_hold'
 
+    STRATEGY_MSG = 'strategy_msg'
+
     def __repr__(self):
         return self.value
 

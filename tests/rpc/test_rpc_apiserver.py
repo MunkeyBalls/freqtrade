@@ -13,7 +13,6 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
 from fastapi.testclient import TestClient
-from numpy import isnan
 from requests.auth import _basic_auth_str
 
 from freqtrade.__init__ import __version__
@@ -579,9 +578,10 @@ def test_api_trades(botclient, mocker, fee, markets, is_short):
     )
     rc = client_get(client, f"{BASE_URI}/trades")
     assert_response(rc)
-    assert len(rc.json()) == 3
+    assert len(rc.json()) == 4
     assert rc.json()['trades_count'] == 0
     assert rc.json()['total_trades'] == 0
+    assert rc.json()['offset'] == 0
 
     create_mock_trades(fee, is_short=is_short)
     Trade.query.session.flush()
@@ -725,7 +725,9 @@ def test_api_edge_disabled(botclient, mocker, ticker, fee, markets):
          'profit_closed_fiat': -83.19455985, 'profit_closed_ratio_mean': -0.0075,
          'profit_closed_percent_mean': -0.75, 'profit_closed_ratio_sum': -0.015,
          'profit_closed_percent_sum': -1.5, 'profit_closed_ratio': -6.739057628404269e-06,
-         'profit_closed_percent': -0.0, 'winning_trades': 0, 'losing_trades': 2}
+         'profit_closed_percent': -0.0, 'winning_trades': 0, 'losing_trades': 2,
+         'profit_factor': 0.0, 'trading_volume': 91.074,
+         }
     ),
     (
         False,
@@ -738,7 +740,9 @@ def test_api_edge_disabled(botclient, mocker, ticker, fee, markets):
          'profit_closed_fiat': 9.124559849999999, 'profit_closed_ratio_mean': 0.0075,
          'profit_closed_percent_mean': 0.75, 'profit_closed_ratio_sum': 0.015,
          'profit_closed_percent_sum': 1.5, 'profit_closed_ratio': 7.391275897987988e-07,
-         'profit_closed_percent': 0.0, 'winning_trades': 2, 'losing_trades': 0}
+         'profit_closed_percent': 0.0, 'winning_trades': 2, 'losing_trades': 0,
+         'profit_factor': None, 'trading_volume': 91.074,
+         }
     ),
     (
         None,
@@ -751,7 +755,9 @@ def test_api_edge_disabled(botclient, mocker, ticker, fee, markets):
          'profit_closed_fiat': -67.02260985, 'profit_closed_ratio_mean': 0.0025,
          'profit_closed_percent_mean': 0.25, 'profit_closed_ratio_sum': 0.005,
          'profit_closed_percent_sum': 0.5, 'profit_closed_ratio': -5.429078808526421e-06,
-         'profit_closed_percent': -0.0, 'winning_trades': 1, 'losing_trades': 1}
+         'profit_closed_percent': -0.0, 'winning_trades': 1, 'losing_trades': 1,
+         'profit_factor': 0.02775724835771106, 'trading_volume': 91.074,
+         }
     )
 ])
 def test_api_profit(botclient, mocker, ticker, fee, markets, is_short, expected):
@@ -804,6 +810,10 @@ def test_api_profit(botclient, mocker, ticker, fee, markets, is_short, expected)
         'closed_trade_count': 2,
         'winning_trades': expected['winning_trades'],
         'losing_trades': expected['losing_trades'],
+        'profit_factor': expected['profit_factor'],
+        'max_drawdown': ANY,
+        'max_drawdown_abs': ANY,
+        'trading_volume': expected['trading_volume'],
     }
 
 
@@ -853,8 +863,8 @@ def test_api_performance(botclient, fee):
         close_rate=0.265441,
 
     )
-    trade.close_profit = trade.calc_profit_ratio()
-    trade.close_profit_abs = trade.calc_profit()
+    trade.close_profit = trade.calc_profit_ratio(trade.close_rate)
+    trade.close_profit_abs = trade.calc_profit(trade.close_rate)
     Trade.query.session.add(trade)
 
     trade = Trade(
@@ -869,8 +879,8 @@ def test_api_performance(botclient, fee):
         fee_open=fee.return_value,
         close_rate=0.391
     )
-    trade.close_profit = trade.calc_profit_ratio()
-    trade.close_profit_abs = trade.calc_profit()
+    trade.close_profit = trade.calc_profit_ratio(trade.close_rate)
+    trade.close_profit_abs = trade.calc_profit(trade.close_rate)
 
     Trade.query.session.add(trade)
     Trade.commit()
@@ -973,6 +983,7 @@ def test_api_status(botclient, mocker, ticker, fee, markets, is_short,
         'exchange': 'binance',
         'leverage': 1.0,
         'interest_rate': 0.0,
+        'liquidation_price': None,
         'funding_fees': None,
         'trading_mode': ANY,
         'orders': [ANY],
@@ -985,7 +996,7 @@ def test_api_status(botclient, mocker, ticker, fee, markets, is_short,
     assert_response(rc)
     resp_values = rc.json()
     assert len(resp_values) == 4
-    assert isnan(resp_values[0]['profit_abs'])
+    assert resp_values[0]['profit_abs'] is None
 
 
 def test_api_version(botclient):
@@ -1176,6 +1187,7 @@ def test_api_force_entry(botclient, mocker, fee, endpoint):
         'exchange': 'binance',
         'leverage': None,
         'interest_rate': None,
+        'liquidation_price': None,
         'funding_fees': None,
         'trading_mode': 'spot',
         'orders': [],
@@ -1383,13 +1395,14 @@ def test_api_strategies(botclient):
     rc = client_get(client, f"{BASE_URI}/strategies")
 
     assert_response(rc)
+
     assert rc.json() == {'strategies': [
         'HyperoptableStrategy',
+        'HyperoptableStrategyV2',
         'InformativeDecoratorTest',
         'StrategyTestV2',
         'StrategyTestV3',
-        'StrategyTestV3Futures',
-        'TestStrategyLegacyV1',
+        'StrategyTestV3Futures'
     ]}
 
 
@@ -1485,7 +1498,7 @@ def test_api_backtesting(botclient, mocker, fee, caplog, tmpdir):
     assert not result['running']
     assert result['status_msg'] == 'Backtest reset'
     ftbot.config['export'] = 'trades'
-    ftbot.config['backtest_cache'] = 'none'
+    ftbot.config['backtest_cache'] = 'day'
     ftbot.config['user_data_dir'] = Path(tmpdir)
     ftbot.config['exportfilename'] = Path(tmpdir) / "backtest_results"
     ftbot.config['exportfilename'].mkdir()
@@ -1558,18 +1571,18 @@ def test_api_backtesting(botclient, mocker, fee, caplog, tmpdir):
 
     ApiServer._bgtask_running = False
 
-    mocker.patch('freqtrade.optimize.backtesting.Backtesting.backtest_one_strategy',
-                 side_effect=DependencyException())
-    rc = client_post(client, f"{BASE_URI}/backtest", data=json.dumps(data))
-    assert log_has("Backtesting caused an error: ", caplog)
-
-    ftbot.config['backtest_cache'] = 'day'
-
     # Rerun backtest (should get previous result)
     rc = client_post(client, f"{BASE_URI}/backtest", data=json.dumps(data))
     assert_response(rc)
     result = rc.json()
     assert log_has_re('Reusing result of previous backtest.*', caplog)
+
+    data['stake_amount'] = 101
+
+    mocker.patch('freqtrade.optimize.backtesting.Backtesting.backtest_one_strategy',
+                 side_effect=DependencyException())
+    rc = client_post(client, f"{BASE_URI}/backtest", data=json.dumps(data))
+    assert log_has("Backtesting caused an error: ", caplog)
 
     # Delete backtesting to avoid leakage since the backtest-object may stick around.
     rc = client_delete(client, f"{BASE_URI}/backtest")
@@ -1579,6 +1592,38 @@ def test_api_backtesting(botclient, mocker, fee, caplog, tmpdir):
     assert result['status'] == 'reset'
     assert not result['running']
     assert result['status_msg'] == 'Backtest reset'
+
+
+def test_api_backtest_history(botclient, mocker, testdatadir):
+    ftbot, client = botclient
+    mocker.patch('freqtrade.data.btanalysis._get_backtest_files',
+                 return_value=[
+                     testdatadir / 'backtest_results/backtest-result_multistrat.json',
+                     testdatadir / 'backtest_results/backtest-result_new.json'
+                     ])
+
+    rc = client_get(client, f"{BASE_URI}/backtest/history")
+    assert_response(rc, 502)
+    ftbot.config['user_data_dir'] = testdatadir
+    ftbot.config['runmode'] = RunMode.WEBSERVER
+
+    rc = client_get(client, f"{BASE_URI}/backtest/history")
+    assert_response(rc)
+    result = rc.json()
+    assert len(result) == 3
+    fn = result[0]['filename']
+    assert fn == "backtest-result_multistrat.json"
+    strategy = result[0]['strategy']
+    rc = client_get(client, f"{BASE_URI}/backtest/history/result?filename={fn}&strategy={strategy}")
+    assert_response(rc)
+    result2 = rc.json()
+    assert result2
+    assert result2['status'] == 'ended'
+    assert not result2['running']
+    assert result2['progress'] == 1
+    # Only one strategy loaded - even though we use multiresult
+    assert len(result2['backtest_result']['strategy']) == 1
+    assert result2['backtest_result']['strategy'][strategy]
 
 
 def test_health(botclient):

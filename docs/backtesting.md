@@ -20,7 +20,8 @@ usage: freqtrade backtesting [-h] [-v] [--logfile FILE] [-V] [-c PATH]
                              [--dry-run-wallet DRY_RUN_WALLET]
                              [--timeframe-detail TIMEFRAME_DETAIL]
                              [--strategy-list STRATEGY_LIST [STRATEGY_LIST ...]]
-                             [--export {none,trades}] [--export-filename PATH]
+                             [--export {none,trades,signals}]
+                             [--export-filename PATH]
                              [--breakdown {day,week,month} [{day,week,month} ...]]
                              [--cache {none,day,week,month}]
 
@@ -63,18 +64,17 @@ optional arguments:
                         `30m`, `1h`, `1d`).
   --strategy-list STRATEGY_LIST [STRATEGY_LIST ...]
                         Provide a space-separated list of strategies to
-                        backtest. Please note that timeframe needs to be
-                        set either in config or via command line. When using
-                        this together with `--export trades`, the strategy-
-                        name is injected into the filename (so `backtest-
-                        data.json` becomes `backtest-data-SampleStrategy.json`
-  --export {none,trades}
+                        backtest. Please note that timeframe needs to be set
+                        either in config or via command line. When using this
+                        together with `--export trades`, the strategy-name is
+                        injected into the filename (so `backtest-data.json`
+                        becomes `backtest-data-SampleStrategy.json`
+  --export {none,trades,signals}
                         Export backtest results (default: trades).
-  --export-filename PATH
-                        Save backtest results to the file with this filename.
-                        Requires `--export` to be set as well. Example:
-                        `--export-filename=user_data/backtest_results/backtest
-                        _today.json`
+  --export-filename PATH, --backtest-filename PATH
+                        Use this filename for backtest results.Requires
+                        `--export` to be set as well. Example: `--export-filen
+                        ame=user_data/backtest_results/backtest_today.json`
   --breakdown {day,week,month} [{day,week,month} ...]
                         Show backtesting breakdown per [day, week, month].
   --cache {none,day,week,month}
@@ -287,44 +287,55 @@ A backtesting result will look like that:
 | ADA/BTC  |      1 |           0.89 |           0.89 |       0.00004434 |           0.44 | 6:00:00        |    1    0    0  100 |
 | LTC/BTC  |      1 |           0.68 |           0.68 |       0.00003421 |           0.34 | 2:00:00        |    1    0    0  100 |
 | TOTAL    |      2 |           0.78 |           1.57 |       0.00007855 |           0.78 | 4:00:00        |    2    0    0  100 |
-================ SUMMARY METRICS ===============
-| Metric                 | Value               |
-|------------------------+---------------------|
-| Backtesting from       | 2019-01-01 00:00:00 |
-| Backtesting to         | 2019-05-01 00:00:00 |
-| Max open trades        | 3                   |
-|                        |                     |
-| Total/Daily Avg Trades | 429 / 3.575         |
-| Starting balance       | 0.01000000 BTC      |
-| Final balance          | 0.01762792 BTC      |
-| Absolute profit        | 0.00762792 BTC      |
-| Total profit %         | 76.2%               |
-| Trades per day         | 3.575               |
-| Avg. stake amount      | 0.001      BTC      |
-| Total trade volume     | 0.429      BTC      |
-|                        |                     |
-| Best Pair              | LSK/BTC 26.26%      |
-| Worst Pair             | ZEC/BTC -10.18%     |
-| Best Trade             | LSK/BTC 4.25%       |
-| Worst Trade            | ZEC/BTC -10.25%     |
-| Best day               | 0.00076 BTC         |
-| Worst day              | -0.00036 BTC        |
-| Days win/draw/lose     | 12 / 82 / 25        |
-| Avg. Duration Winners  | 4:23:00             |
-| Avg. Duration Loser    | 6:55:00             |
-| Rejected Entry signals | 3089                |
-| Entry/Exit Timeouts    | 0 / 0               |
-|                        |                     |
-| Min balance            | 0.00945123 BTC      |
-| Max balance            | 0.01846651 BTC      |
-| Drawdown (Account)     | 13.33%              |
-| Drawdown               | 0.0015 BTC          |
-| Drawdown high          | 0.0013 BTC          |
-| Drawdown low           | -0.0002 BTC         |
-| Drawdown Start         | 2019-02-15 14:10:00 |
-| Drawdown End           | 2019-04-11 18:15:00 |
-| Market change          | -5.88%              |
-===============================================
+================== SUMMARY METRICS ==================
+| Metric                      | Value               |
+|-----------------------------+---------------------|
+| Backtesting from            | 2019-01-01 00:00:00 |
+| Backtesting to              | 2019-05-01 00:00:00 |
+| Max open trades             | 3                   |
+|                             |                     |
+| Total/Daily Avg Trades      | 429 / 3.575         |
+| Starting balance            | 0.01000000 BTC      |
+| Final balance               | 0.01762792 BTC      |
+| Absolute profit             | 0.00762792 BTC      |
+| Total profit %              | 76.2%               |
+| CAGR %                      | 460.87%             |
+| Profit factor               | 1.11                |
+| Avg. stake amount           | 0.001      BTC      |
+| Total trade volume          | 0.429      BTC      |
+|                             |                     |
+| Long / Short                | 352 / 77            |
+| Total profit Long %         | 1250.58%            |
+| Total profit Short %        | -15.02%             |
+| Absolute profit Long        | 0.00838792 BTC      |
+| Absolute profit Short       | -0.00076 BTC        |
+|                             |                     |
+| Best Pair                   | LSK/BTC 26.26%      |
+| Worst Pair                  | ZEC/BTC -10.18%     |
+| Best Trade                  | LSK/BTC 4.25%       |
+| Worst Trade                 | ZEC/BTC -10.25%     |
+| Best day                    | 0.00076 BTC         |
+| Worst day                   | -0.00036 BTC        |
+| Days win/draw/lose          | 12 / 82 / 25        |
+| Avg. Duration Winners       | 4:23:00             |
+| Avg. Duration Loser         | 6:55:00             |
+| Rejected Entry signals      | 3089                |
+| Entry/Exit Timeouts         | 0 / 0               |
+| Canceled Trade Entries      | 34                  |
+| Canceled Entry Orders       | 123                 |
+| Replaced Entry Orders       | 89                  |
+|                             |                     |
+| Min balance                 | 0.00945123 BTC      |
+| Max balance                 | 0.01846651 BTC      |
+| Max % of account underwater | 25.19%              |
+| Absolute Drawdown (Account) | 13.33%              |
+| Drawdown                    | 0.0015 BTC          |
+| Drawdown high               | 0.0013 BTC          |
+| Drawdown low                | -0.0002 BTC         |
+| Drawdown Start              | 2019-02-15 14:10:00 |
+| Drawdown End                | 2019-04-11 18:15:00 |
+| Market change               | -5.88%              |
+=====================================================
 ```
 
 ### Backtesting report table
@@ -376,49 +387,55 @@ The last element of the backtest report is the summary metrics table.
 It contains some useful key metrics about performance of your strategy on backtesting data.
 
 ```
-================ SUMMARY METRICS ===============
-| Metric                 | Value               |
-|------------------------+---------------------|
-| Backtesting from       | 2019-01-01 00:00:00 |
-| Backtesting to         | 2019-05-01 00:00:00 |
-| Max open trades        | 3                   |
-|                        |                     |
-| Total/Daily Avg Trades | 429 / 3.575         |
-| Starting balance       | 0.01000000 BTC      |
-| Final balance          | 0.01762792 BTC      |
-| Absolute profit        | 0.00762792 BTC      |
-| Total profit %         | 76.2%               |
-| Avg. stake amount      | 0.001      BTC      |
-| Total trade volume     | 0.429      BTC      |
-|                        |                     |
-| Long / Short           | 352 / 77            |
-| Total profit Long %    | 1250.58%            |
-| Total profit Short %   | -15.02%             |
-| Absolute profit Long   | 0.00838792 BTC      |
-| Absolute profit Short  | -0.00076 BTC        |
-|                        |                     |
-| Best Pair              | LSK/BTC 26.26%      |
-| Worst Pair             | ZEC/BTC -10.18%     |
-| Best Trade             | LSK/BTC 4.25%       |
-| Worst Trade            | ZEC/BTC -10.25%     |
-| Best day               | 0.00076 BTC         |
-| Worst day              | -0.00036 BTC        |
-| Days win/draw/lose     | 12 / 82 / 25        |
-| Avg. Duration Winners  | 4:23:00             |
-| Avg. Duration Loser    | 6:55:00             |
-| Rejected Entry signals | 3089                |
-| Entry/Exit Timeouts    | 0 / 0               |
-|                        |                     |
-| Min balance            | 0.00945123 BTC      |
-| Max balance            | 0.01846651 BTC      |
-| Drawdown (Account)     | 13.33%              |
-| Drawdown               | 0.0015 BTC          |
-| Drawdown high          | 0.0013 BTC          |
-| Drawdown low           | -0.0002 BTC         |
-| Drawdown Start         | 2019-02-15 14:10:00 |
-| Drawdown End           | 2019-04-11 18:15:00 |
-| Market change          | -5.88%              |
-================================================
+================== SUMMARY METRICS ==================
+| Metric                      | Value               |
+|-----------------------------+---------------------|
+| Backtesting from            | 2019-01-01 00:00:00 |
+| Backtesting to              | 2019-05-01 00:00:00 |
+| Max open trades             | 3                   |
+|                             |                     |
+| Total/Daily Avg Trades      | 429 / 3.575         |
+| Starting balance            | 0.01000000 BTC      |
+| Final balance               | 0.01762792 BTC      |
+| Absolute profit             | 0.00762792 BTC      |
+| Total profit %              | 76.2%               |
+| CAGR %                      | 460.87%             |
+| Profit factor               | 1.11                |
+| Avg. stake amount           | 0.001      BTC      |
+| Total trade volume          | 0.429      BTC      |
+|                             |                     |
+| Long / Short                | 352 / 77            |
+| Total profit Long %         | 1250.58%            |
+| Total profit Short %        | -15.02%             |
+| Absolute profit Long        | 0.00838792 BTC      |
+| Absolute profit Short       | -0.00076 BTC        |
+|                             |                     |
+| Best Pair                   | LSK/BTC 26.26%      |
+| Worst Pair                  | ZEC/BTC -10.18%     |
+| Best Trade                  | LSK/BTC 4.25%       |
+| Worst Trade                 | ZEC/BTC -10.25%     |
+| Best day                    | 0.00076 BTC         |
+| Worst day                   | -0.00036 BTC        |
+| Days win/draw/lose          | 12 / 82 / 25        |
+| Avg. Duration Winners       | 4:23:00             |
+| Avg. Duration Loser         | 6:55:00             |
+| Rejected Entry signals      | 3089                |
+| Entry/Exit Timeouts         | 0 / 0               |
+| Canceled Trade Entries      | 34                  |
+| Canceled Entry Orders       | 123                 |
+| Replaced Entry Orders       | 89                  |
+|                             |                     |
+| Min balance                 | 0.00945123 BTC      |
+| Max balance                 | 0.01846651 BTC      |
+| Max % of account underwater | 25.19%              |
+| Absolute Drawdown (Account) | 13.33%              |
+| Drawdown                    | 0.0015 BTC          |
+| Drawdown high               | 0.0013 BTC          |
+| Drawdown low                | -0.0002 BTC         |
+| Drawdown Start              | 2019-02-15 14:10:00 |
+| Drawdown End                | 2019-04-11 18:15:00 |
+| Market change               | -5.88%              |
+=====================================================
 
 ```
 
@@ -429,6 +446,8 @@ It contains some useful key metrics about performance of your strategy on backte
 - `Final balance`: Final balance - starting balance + absolute profit.
 - `Absolute profit`: Profit made in stake currency.
 - `Total profit %`: Total profit. Aligned to the `TOTAL` row's `Tot Profit %` from the first table. Calculated as `(End capital − Starting capital) / Starting capital`.
+- `CAGR %`: Compound annual growth rate.
+- `Profit factor`: profit / loss.
 - `Avg. stake amount`: Average stake amount, either `stake_amount` or the average when using dynamic stake amount.
 - `Total trade volume`: Volume generated on the exchange to reach the above profit.
 - `Best Pair` / `Worst Pair`: Best and worst performing pair, and it's corresponding `Cum Profit %`.
@@ -438,8 +457,13 @@ It contains some useful key metrics about performance of your strategy on backte
 - `Avg. Duration Winners` / `Avg. Duration Loser`: Average durations for winning and losing trades.
 - `Rejected Entry signals`: Trade entry signals that could not be acted upon due to `max_open_trades` being reached.
 - `Entry/Exit Timeouts`: Entry/exit orders which did not fill (only applicable if custom pricing is used).
+- `Canceled Trade Entries`: Number of trades that have been canceled by user request via `adjust_entry_price`.
+- `Canceled Entry Orders`: Number of entry orders that have been canceled by user request via `adjust_entry_price`.
+- `Replaced Entry Orders`: Number of entry orders that have been replaced by user request via `adjust_entry_price`.
 - `Min balance` / `Max balance`: Lowest and Highest Wallet balance during the backtest period.
-- `Drawdown (Account)`: Maximum Account Drawdown experienced. Calculated as $(Absolute Drawdown) / (DrawdownHigh + startingBalance)$.
+- `Max % of account underwater`: Maximum percentage your account has decreased from the top since the simulation started.
+Calculated as the maximum of `(Max Balance - Current Balance) / (Max Balance)`.
+- `Absolute Drawdown (Account)`: Maximum Account Drawdown experienced. Calculated as `(Absolute Drawdown) / (DrawdownHigh + startingBalance)`.
 - `Drawdown`: Maximum, absolute drawdown experienced. Difference between Drawdown High and Subsequent Low point.
 - `Drawdown high` / `Drawdown low`: Profit at the beginning and end of the largest drawdown period. A negative low value means initial capital lost.
 - `Drawdown Start` / `Drawdown End`: Start and end datetime for this largest drawdown (can also be visualized via the `plot-dataframe` sub-command).
@@ -455,7 +479,7 @@ You can get an overview over daily / weekly or monthly results by using the `--b
 To visualize daily and weekly breakdowns, you can use the following:
 
 ``` bash
-freqtrade backtesting --strategy MyAwesomeStrategy --breakdown day month
+freqtrade backtesting --strategy MyAwesomeStrategy --breakdown day week
 ```
 
 ``` output
@@ -471,7 +495,7 @@ freqtrade backtesting --strategy MyAwesomeStrategy --breakdown day month
 
 ```
 
-The output will show a table containing the realized absolute Profit (in stake currency) for the given timeperiod, as well as wins, draws and losses that materialized (closed) on this day.
+The output will show a table containing the realized absolute Profit (in stake currency) for the given timeperiod, as well as wins, draws and losses that materialized (closed) on this day. Below that there will be a second table for the summarized values of weeks indicated by the date of the closing Sunday. The same would apply to a monthly breakdown indicated by the last day of the month.
 
 ### Backtest result caching
 
@@ -510,8 +534,9 @@ Since backtesting lacks some detailed information about what happens within a ca
 - Exit-reason does not explain if a trade was positive or negative, just what triggered the exit (this can look odd if negative ROI values are used)
 - Evaluation sequence (if multiple signals happen on the same candle)
   - Exit-signal
-  - ROI (if not stoploss)
   - Stoploss
+  - ROI
+  - Trailing stoploss
 
 Taking these assumptions, backtesting tries to mirror real trading as closely as possible. However, backtesting will **never** replace running a strategy in dry-run mode.
 Also, keep in mind that past results don't guarantee future success.

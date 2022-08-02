@@ -78,9 +78,21 @@ def get_args(args):
 
 
 # Source: https://stackoverflow.com/questions/29881236/how-to-mock-asyncio-coroutines
-def get_mock_coro(return_value):
+# TODO: This should be replaced with AsyncMock once support for python 3.7 is dropped.
+def get_mock_coro(return_value=None, side_effect=None):
     async def mock_coro(*args, **kwargs):
-        return return_value
+        if side_effect:
+            if isinstance(side_effect, list):
+                effect = side_effect.pop(0)
+            else:
+                effect = side_effect
+            if isinstance(effect, Exception):
+                raise effect
+            if callable(effect):
+                return effect(*args, **kwargs)
+            return effect
+        else:
+            return return_value
 
     return Mock(wraps=mock_coro)
 
@@ -100,11 +112,8 @@ def patch_exchange(
     mock_supported_modes=True
 ) -> None:
     mocker.patch('freqtrade.exchange.Exchange._load_async_markets', MagicMock(return_value={}))
-    mocker.patch('freqtrade.exchange.Exchange.validate_pairs', MagicMock())
+    mocker.patch('freqtrade.exchange.Exchange.validate_config', MagicMock())
     mocker.patch('freqtrade.exchange.Exchange.validate_timeframes', MagicMock())
-    mocker.patch('freqtrade.exchange.Exchange.validate_ordertypes', MagicMock())
-    mocker.patch('freqtrade.exchange.Exchange.validate_stakecurrency', MagicMock())
-    mocker.patch('freqtrade.exchange.Exchange.validate_pricing')
     mocker.patch('freqtrade.exchange.Exchange.id', PropertyMock(return_value=id))
     mocker.patch('freqtrade.exchange.Exchange.name', PropertyMock(return_value=id.title()))
     mocker.patch('freqtrade.exchange.Exchange.precisionMode', PropertyMock(return_value=2))
@@ -139,7 +148,7 @@ def get_patched_exchange(mocker, config, api_mock=None, id='binance',
     patch_exchange(mocker, api_mock, id, mock_markets, mock_supported_modes)
     config['exchange']['name'] = id
     try:
-        exchange = ExchangeResolver.load_exchange(id, config)
+        exchange = ExchangeResolver.load_exchange(id, config, load_leverage_tiers=True)
     except ImportError:
         exchange = Exchange(config)
     return exchange
@@ -325,7 +334,7 @@ def create_mock_trades_with_leverage(fee, use_db: bool = True):
         Trade.query.session.flush()
 
 
-def create_mock_trades_usdt(fee, use_db: bool = True):
+def create_mock_trades_usdt(fee, is_short: Optional[bool] = False, use_db: bool = True):
     """
     Create some fake trades ...
     """
@@ -335,26 +344,29 @@ def create_mock_trades_usdt(fee, use_db: bool = True):
         else:
             LocalTrade.add_bt_trade(trade)
 
+    is_short1 = is_short if is_short is not None else True
+    is_short2 = is_short if is_short is not None else False
+
     # Simulate dry_run entries
-    trade = mock_trade_usdt_1(fee)
+    trade = mock_trade_usdt_1(fee, is_short1)
     add_trade(trade)
 
-    trade = mock_trade_usdt_2(fee)
+    trade = mock_trade_usdt_2(fee, is_short1)
     add_trade(trade)
 
-    trade = mock_trade_usdt_3(fee)
+    trade = mock_trade_usdt_3(fee, is_short1)
     add_trade(trade)
 
-    trade = mock_trade_usdt_4(fee)
+    trade = mock_trade_usdt_4(fee, is_short2)
     add_trade(trade)
 
-    trade = mock_trade_usdt_5(fee)
+    trade = mock_trade_usdt_5(fee, is_short2)
     add_trade(trade)
 
-    trade = mock_trade_usdt_6(fee)
+    trade = mock_trade_usdt_6(fee, is_short1)
     add_trade(trade)
 
-    trade = mock_trade_usdt_7(fee)
+    trade = mock_trade_usdt_7(fee, is_short1)
     add_trade(trade)
     if use_db:
         Trade.commit()
@@ -384,7 +396,7 @@ def patch_coingekko(mocker) -> None:
 
 @pytest.fixture(scope='function')
 def init_persistence(default_conf):
-    init_db(default_conf['db_url'], default_conf['dry_run'])
+    init_db(default_conf['db_url'])
 
 
 @pytest.fixture(scope="function")
@@ -1616,6 +1628,7 @@ def limit_buy_order_open():
         'datetime': arrow.utcnow().isoformat(),
         'price': 0.00001099,
         'amount': 90.99181073,
+        'average': None,
         'filled': 0.0,
         'cost': 0.0009999,
         'remaining': 90.99181073,
@@ -1630,40 +1643,6 @@ def limit_buy_order(limit_buy_order_open):
     order['filled'] = order['amount']
     order['remaining'] = 0.0
     return order
-
-
-@pytest.fixture(scope='function')
-def market_buy_order():
-    return {
-        'id': 'mocked_market_buy',
-        'type': 'market',
-        'side': 'buy',
-        'symbol': 'mocked',
-        'timestamp': arrow.utcnow().int_timestamp * 1000,
-        'datetime': arrow.utcnow().isoformat(),
-        'price': 0.00004099,
-        'amount': 91.99181073,
-        'filled': 91.99181073,
-        'remaining': 0.0,
-        'status': 'closed'
-    }
-
-
-@pytest.fixture
-def market_sell_order():
-    return {
-        'id': 'mocked_limit_sell',
-        'type': 'market',
-        'side': 'sell',
-        'symbol': 'mocked',
-        'timestamp': arrow.utcnow().int_timestamp * 1000,
-        'datetime': arrow.utcnow().isoformat(),
-        'price': 0.00004173,
-        'amount': 91.99181073,
-        'filled': 91.99181073,
-        'remaining': 0.0,
-        'status': 'closed'
-    }
 
 
 @pytest.fixture
@@ -1712,6 +1691,7 @@ def limit_buy_order_old_partial():
         'price': 0.00001099,
         'amount': 90.99181073,
         'filled': 23.0,
+        'cost': 90.99181073 * 23.0,
         'remaining': 67.99181073,
         'status': 'open'
     }
@@ -2629,7 +2609,7 @@ def open_trade_usdt():
         pair='ADA/USDT',
         open_rate=2.0,
         exchange='binance',
-        open_order_id='123456789',
+        open_order_id='123456789_exit',
         amount=30.0,
         fee_open=0.0,
         fee_close=0.0,
@@ -2647,6 +2627,23 @@ def open_trade_usdt():
             symbol=trade.pair,
             order_type="market",
             side="buy",
+            price=trade.open_rate,
+            average=trade.open_rate,
+            filled=trade.amount,
+            remaining=0,
+            cost=trade.open_rate * trade.amount,
+            order_date=trade.open_date,
+            order_filled_date=trade.open_date,
+        ),
+        Order(
+            ft_order_side='exit',
+            ft_pair=trade.pair,
+            ft_is_open=True,
+            order_id='123456789_exit',
+            status="open",
+            symbol=trade.pair,
+            order_type="limit",
+            side="sell",
             price=trade.open_rate,
             average=trade.open_rate,
             filled=trade.amount,
@@ -2672,6 +2669,7 @@ def saved_hyperopt_results():
             'total_profit': -0.00125625,
             'current_epoch': 1,
             'is_initial_point': True,
+            'is_random': False,
             'is_best': True,
 
         }, {
@@ -2688,6 +2686,7 @@ def saved_hyperopt_results():
             'total_profit': 6.185e-05,
             'current_epoch': 2,
             'is_initial_point': True,
+            'is_random': False,
             'is_best': False
         }, {
             'loss': 14.241196856510731,
@@ -2698,6 +2697,7 @@ def saved_hyperopt_results():
             'total_profit': -0.13639474,
             'current_epoch': 3,
             'is_initial_point': True,
+            'is_random': False,
             'is_best': False
         }, {
             'loss': 100000,
@@ -2705,7 +2705,7 @@ def saved_hyperopt_results():
             'params_details': {'buy': {'mfi-value': 13, 'fastd-value': 35, 'adx-value': 39, 'rsi-value': 29, 'mfi-enabled': True, 'fastd-enabled': False, 'adx-enabled': False, 'rsi-enabled': True, 'trigger': 'macd_cross_signal'}, 'sell': {'sell-mfi-value': 87, 'sell-fastd-value': 54, 'sell-adx-value': 63, 'sell-rsi-value': 93, 'sell-mfi-enabled': False, 'sell-fastd-enabled': True, 'sell-adx-enabled': True, 'sell-rsi-enabled': True, 'sell-trigger': 'sell-bb_upper'}, 'roi': {0: 0.411946348378729, 215: 0.2052334363683207, 891: 0.06264755784937427, 2293: 0}, 'stoploss': {'stoploss': -0.11818343570194478}},  # noqa: E501
             'results_metrics': {'total_trades': 0, 'wins': 0, 'draws': 0, 'losses': 0, 'profit_mean': None, 'profit_median': None, 'profit_total': 0, 'profit': 0.0, 'holding_avg': timedelta()},  # noqa: E501
             'results_explanation': '     0 trades. Avg profit    nan%. Total profit  0.00000000 BTC (   0.00Σ%). Avg duration   nan min.',  # noqa: E501
-            'total_profit': 0, 'current_epoch': 4, 'is_initial_point': True, 'is_best': False
+            'total_profit': 0, 'current_epoch': 4, 'is_initial_point': True, 'is_random': False, 'is_best': False  # noqa: E501
         }, {
             'loss': 0.22195522184191518,
             'params_dict': {'mfi-value': 17, 'fastd-value': 21, 'adx-value': 38, 'rsi-value': 33, 'mfi-enabled': True, 'fastd-enabled': False, 'adx-enabled': True, 'rsi-enabled': False, 'trigger': 'macd_cross_signal', 'sell-mfi-value': 87, 'sell-fastd-value': 82, 'sell-adx-value': 78, 'sell-rsi-value': 69, 'sell-mfi-enabled': True, 'sell-fastd-enabled': False, 'sell-adx-enabled': True, 'sell-rsi-enabled': False, 'sell-trigger': 'sell-macd_cross_signal', 'roi_t1': 1269, 'roi_t2': 601, 'roi_t3': 444, 'roi_p1': 0.07280999507931168, 'roi_p2': 0.08946698095898986, 'roi_p3': 0.1454876733325284, 'stoploss': -0.18181041180901014},   # noqa: E501
@@ -2715,6 +2715,7 @@ def saved_hyperopt_results():
             'total_profit': -0.002480140000000001,
             'current_epoch': 5,
             'is_initial_point': True,
+            'is_random': False,
             'is_best': True
         }, {
             'loss': 0.545315889154162,
@@ -2725,6 +2726,7 @@ def saved_hyperopt_results():
             'total_profit': -0.0041773,
             'current_epoch': 6,
             'is_initial_point': True,
+            'is_random': False,
             'is_best': False
         }, {
             'loss': 4.713497421432944,
@@ -2737,6 +2739,7 @@ def saved_hyperopt_results():
             'total_profit': -0.06339929,
             'current_epoch': 7,
             'is_initial_point': True,
+            'is_random': False,
             'is_best': False
         }, {
             'loss': 20.0,  # noqa: E501
@@ -2747,6 +2750,7 @@ def saved_hyperopt_results():
             'total_profit': 0.0,
             'current_epoch': 8,
             'is_initial_point': True,
+            'is_random': False,
             'is_best': False
         }, {
             'loss': 2.4731817780991223,
@@ -2757,6 +2761,7 @@ def saved_hyperopt_results():
             'total_profit': -0.044050070000000004,  # noqa: E501
             'current_epoch': 9,
             'is_initial_point': True,
+            'is_random': False,
             'is_best': False
         }, {
             'loss': -0.2604606005845212,  # noqa: E501
@@ -2767,6 +2772,7 @@ def saved_hyperopt_results():
             'total_profit': 0.00021629,
             'current_epoch': 10,
             'is_initial_point': True,
+            'is_random': False,
             'is_best': True
         }, {
             'loss': 4.876465945994304,  # noqa: E501
@@ -2778,6 +2784,7 @@ def saved_hyperopt_results():
             'total_profit': -0.07436117,
             'current_epoch': 11,
             'is_initial_point': True,
+            'is_random': False,
             'is_best': False
         }, {
             'loss': 100000,
@@ -2788,6 +2795,7 @@ def saved_hyperopt_results():
             'total_profit': 0,
             'current_epoch': 12,
             'is_initial_point': True,
+            'is_random': False,
             'is_best': False
             }
     ]
@@ -2932,14 +2940,6 @@ def limit_order(limit_buy_order_usdt, limit_sell_order_usdt):
     return {
         'buy': limit_buy_order_usdt,
         'sell': limit_sell_order_usdt
-    }
-
-
-@pytest.fixture(scope='function')
-def market_order(market_buy_order_usdt, market_sell_order_usdt):
-    return {
-        'buy': market_buy_order_usdt,
-        'sell': market_sell_order_usdt
     }
 
 
@@ -3180,60 +3180,46 @@ def leverage_tiers():
         "AAVE/USDT": [
             {
                 'min': 0,
-                'max': 50000,
+                'max': 5000,
                 'mmr': 0.01,
                 'lev': 50,
                 'maintAmt': 0.0
             },
             {
-                'min': 50000,
-                'max': 250000,
+                'min': 5000,
+                'max': 25000,
                 'mmr': 0.02,
                 'lev': 25,
-                'maintAmt': 500.0
+                'maintAmt': 75.0
+            },
+            {
+                'min': 25000,
+                'max': 100000,
+                'mmr': 0.05,
+                'lev': 10,
+                'maintAmt': 700.0
+            },
+            {
+                'min': 100000,
+                'max': 250000,
+                'mmr': 0.1,
+                'lev': 5,
+                'maintAmt': 5700.0
             },
             {
                 'min': 250000,
                 'max': 1000000,
-                'mmr': 0.05,
-                'lev': 10,
-                'maintAmt': 8000.0
-            },
-            {
-                'min': 1000000,
-                'max': 2000000,
-                'mmr': 0.1,
-                'lev': 5,
-                'maintAmt': 58000.0
-            },
-            {
-                'min': 2000000,
-                'max': 5000000,
                 'mmr': 0.125,
-                'lev': 4,
-                'maintAmt': 108000.0
-            },
-            {
-                'min': 5000000,
-                'max': 10000000,
-                'mmr': 0.1665,
-                'lev': 3,
-                'maintAmt': 315500.0
+                'lev': 2,
+                'maintAmt': 11950.0
             },
             {
                 'min': 10000000,
-                'max': 20000000,
-                'mmr': 0.25,
-                'lev': 2,
-                'maintAmt': 1150500.0
+                'max': 50000000,
+                'mmr': 0.5,
+                'lev': 1,
+                'maintAmt': 386950.0
             },
-            {
-                "min": 20000000,
-                "max": 50000000,
-                "mmr": 0.5,
-                "lev": 1,
-                "maintAmt": 6150500.0
-            }
         ],
         "ADA/BUSD": [
             {

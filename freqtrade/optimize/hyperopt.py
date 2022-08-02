@@ -6,17 +6,19 @@ This module contains the hyperopt logic
 
 import logging
 import random
+import sys
 import warnings
 from datetime import datetime, timezone
 from math import ceil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import progressbar
 import rapidjson
 from colorama import Fore, Style
 from colorama import init as colorama_init
 from joblib import Parallel, cpu_count, delayed, dump, load, wrap_non_picklable_objects
+from joblib.externals import cloudpickle
 from pandas import DataFrame
 
 from freqtrade.constants import DATETIME_PRINT_FORMAT, FTHYPT_FILEVERSION, LAST_BT_RESULT_FN
@@ -27,8 +29,7 @@ from freqtrade.misc import deep_merge_dicts, file_dump_json, plural
 from freqtrade.optimize.backtesting import Backtesting
 # Import IHyperOpt and IHyperOptLoss to allow unpickling classes from these modules
 from freqtrade.optimize.hyperopt_auto import HyperOptAuto
-from freqtrade.optimize.hyperopt_interface import IHyperOpt  # noqa: F401
-from freqtrade.optimize.hyperopt_loss_interface import IHyperOptLoss  # noqa: F401
+from freqtrade.optimize.hyperopt_loss_interface import IHyperOptLoss
 from freqtrade.optimize.hyperopt_tools import HyperoptTools, hyperopt_serializer
 from freqtrade.optimize.optimize_reports import generate_strategy_stats
 from freqtrade.resolvers.hyperopt_resolver import HyperOptLossResolver
@@ -62,7 +63,6 @@ class Hyperopt:
     hyperopt = Hyperopt(config)
     hyperopt.start()
     """
-    custom_hyperopt: IHyperOpt
 
     def __init__(self, config: Dict[str, Any]) -> None:
         self.buy_space: List[Dimension] = []
@@ -77,6 +77,7 @@ class Hyperopt:
 
         self.backtesting = Backtesting(self.config)
         self.pairlist = self.backtesting.pairlists.whitelist
+        self.custom_hyperopt: HyperOptAuto
 
         if not self.config.get('hyperopt'):
             self.custom_hyperopt = HyperOptAuto(self.config)
@@ -88,7 +89,9 @@ class Hyperopt:
         self.backtesting._set_strategy(self.backtesting.strategylist[0])
         self.custom_hyperopt.strategy = self.backtesting.strategy
 
-        self.custom_hyperoptloss = HyperOptLossResolver.load_hyperoptloss(self.config)
+        self.hyperopt_pickle_magic(self.backtesting.strategy.__class__.__bases__)
+        self.custom_hyperoptloss: IHyperOptLoss = HyperOptLossResolver.load_hyperoptloss(
+            self.config)
         self.calculate_loss = self.custom_hyperoptloss.hyperopt_loss_function
         time_now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         strategy = str(self.config['strategy'])
@@ -136,6 +139,17 @@ class Hyperopt:
             if p.is_file():
                 logger.info(f"Removing `{p}`.")
                 p.unlink()
+
+    def hyperopt_pickle_magic(self, bases) -> None:
+        """
+        Hyperopt magic to allow strategy inheritance across files.
+        For this to properly work, we need to register the module of the imported class
+        to pickle as value.
+        """
+        for modules in bases:
+            if modules.__name__ != 'IStrategy':
+                cloudpickle.register_pickle_by_value(sys.modules[modules.__module__])
+                self.hyperopt_pickle_magic(modules.__bases__)
 
     def _get_params_dict(self, dimensions: List[Dimension], raw_params: List[Any]) -> Dict:
 
@@ -290,7 +304,7 @@ class Hyperopt:
             self.assign_params(params_dict, 'protection')
 
         if HyperoptTools.has_space(self.config, 'roi'):
-            self.backtesting.strategy.minimal_roi = (  # type: ignore
+            self.backtesting.strategy.minimal_roi = (
                 self.custom_hyperopt.generate_roi_table(params_dict))
 
         if HyperoptTools.has_space(self.config, 'stoploss'):
@@ -409,8 +423,53 @@ class Hyperopt:
         # Store non-trimmed data - will be trimmed after signal generation.
         dump(preprocessed, self.data_pickle_file)
 
+    def get_asked_points(self, n_points: int) -> Tuple[List[List[Any]], List[bool]]:
+        """
+        Enforce points returned from `self.opt.ask` have not been already evaluated
+
+        Steps:
+        1. Try to get points using `self.opt.ask` first
+        2. Discard the points that have already been evaluated
+        3. Retry using `self.opt.ask` up to 3 times
+        4. If still some points are missing in respect to `n_points`, random sample some points
+        5. Repeat until at least `n_points` points in the `asked_non_tried` list
+        6. Return a list with length truncated at `n_points`
+        """
+        def unique_list(a_list):
+            new_list = []
+            for item in a_list:
+                if item not in new_list:
+                    new_list.append(item)
+            return new_list
+        i = 0
+        asked_non_tried: List[List[Any]] = []
+        is_random_non_tried: List[bool] = []
+        while i < 5 and len(asked_non_tried) < n_points:
+            if i < 3:
+                self.opt.cache_ = {}
+                asked = unique_list(self.opt.ask(n_points=n_points * 5))
+                is_random = [False for _ in range(len(asked))]
+            else:
+                asked = unique_list(self.opt.space.rvs(n_samples=n_points * 5))
+                is_random = [True for _ in range(len(asked))]
+            is_random_non_tried += [rand for x, rand in zip(asked, is_random)
+                                    if x not in self.opt.Xi
+                                    and x not in asked_non_tried]
+            asked_non_tried += [x for x in asked
+                                if x not in self.opt.Xi
+                                and x not in asked_non_tried]
+            i += 1
+
+        if asked_non_tried:
+            return (
+                asked_non_tried[:min(len(asked_non_tried), n_points)],
+                is_random_non_tried[:min(len(asked_non_tried), n_points)]
+            )
+        else:
+            return self.opt.ask(n_points=n_points), [False for _ in range(n_points)]
+
     def start(self) -> None:
-        self.random_state = self._set_random_state(self.config.get('hyperopt_random_state', None))
+        self.random_state = self._set_random_state(self.config.get('hyperopt_random_state'))
         logger.info(f"Using optimizer random state: {self.random_state}")
         self.hyperopt_table_header = -1
         # Initialize spaces ...
@@ -420,9 +479,10 @@ class Hyperopt:
 
         # We don't need exchange instance anymore while running hyperopt
         self.backtesting.exchange.close()
-        self.backtesting.exchange._api = None  # type: ignore
-        self.backtesting.exchange._api_async = None  # type: ignore
+        self.backtesting.exchange._api = None
+        self.backtesting.exchange._api_async = None
         self.backtesting.exchange.loop = None  # type: ignore
+        self.backtesting.exchange._loop_lock = None  # type: ignore
         # self.backtesting.exchange = None  # type: ignore
         self.backtesting.pairlists = None  # type: ignore
 
@@ -473,7 +533,7 @@ class Hyperopt:
                         n_rest = (i + 1) * jobs - self.total_epochs
                         current_jobs = jobs - n_rest if n_rest > 0 else jobs
 
-                        asked = self.opt.ask(n_points=current_jobs)
+                        asked, is_random = self.get_asked_points(n_points=current_jobs)
                         f_val = self.run_optimizer_parallel(parallel, asked, i)
                         self.opt.tell(asked, [v['loss'] for v in f_val])
 
@@ -492,6 +552,7 @@ class Hyperopt:
                             # evaluations can take different time. Here they are aligned in the
                             # order they will be shown to the user.
                             val['is_best'] = is_best
+                            val['is_random'] = is_random[j]
                             self.print_results(val)
 
                             if is_best:

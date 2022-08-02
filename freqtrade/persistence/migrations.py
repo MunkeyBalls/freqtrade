@@ -1,15 +1,16 @@
 import logging
 from typing import List
 
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, select, text, tuple_, update
 
 from freqtrade.exceptions import OperationalException
+from freqtrade.persistence.trade_model import Order, Trade
 
 
 logger = logging.getLogger(__name__)
 
 
-def get_table_names_for_table(inspector, tabletype):
+def get_table_names_for_table(inspector, tabletype) -> List[str]:
     return [t for t in inspector.get_table_names() if t.startswith(tabletype)]
 
 
@@ -21,7 +22,7 @@ def get_column_def(columns: List, column: str, default: str) -> str:
     return default if not has_column(columns, column) else column
 
 
-def get_backup_name(tabs, backup_prefix: str):
+def get_backup_name(tabs: List[str], backup_prefix: str):
     table_back_name = backup_prefix
     for i, table_back_name in enumerate(tabs):
         table_back_name = f'{backup_prefix}{i}'
@@ -46,7 +47,7 @@ def get_last_sequence_ids(engine, trade_back_name, order_back_name):
     return order_id, trade_id
 
 
-def set_sequence_ids(engine, order_id, trade_id):
+def set_sequence_ids(engine, order_id, trade_id, pairlock_id=None):
 
     if engine.name == 'postgresql':
         with engine.begin() as connection:
@@ -54,6 +55,19 @@ def set_sequence_ids(engine, order_id, trade_id):
                 connection.execute(text(f"ALTER SEQUENCE orders_id_seq RESTART WITH {order_id}"))
             if trade_id:
                 connection.execute(text(f"ALTER SEQUENCE trades_id_seq RESTART WITH {trade_id}"))
+            if pairlock_id:
+                connection.execute(
+                    text(f"ALTER SEQUENCE pairlocks_id_seq RESTART WITH {pairlock_id}"))
+
+
+def drop_index_on_table(engine, inspector, table_bak_name):
+    with engine.begin() as connection:
+        # drop indexes on backup table in new session
+        for index in inspector.get_indexes(table_bak_name):
+            if engine.name == 'mysql':
+                connection.execute(text(f"drop index {index['name']} on {table_bak_name}"))
+            else:
+                connection.execute(text(f"drop index {index['name']}"))
 
 
 def migrate_trades_and_orders_table(
@@ -93,7 +107,10 @@ def migrate_trades_and_orders_table(
     liquidation_price = get_column_def(cols, 'liquidation_price',
                                        get_column_def(cols, 'isolated_liq', 'null'))
     # sqlite does not support literals for booleans
-    is_short = get_column_def(cols, 'is_short', '0')
+    if engine.name == 'postgresql':
+        is_short = get_column_def(cols, 'is_short', 'false')
+    else:
+        is_short = get_column_def(cols, 'is_short', '0')
 
     # Margin Properties
     interest_rate = get_column_def(cols, 'interest_rate', '0.0')
@@ -120,13 +137,7 @@ def migrate_trades_and_orders_table(
     with engine.begin() as connection:
         connection.execute(text(f"alter table trades rename to {trade_back_name}"))
 
-    with engine.begin() as connection:
-        # drop indexes on backup table in new session
-        for index in inspector.get_indexes(trade_back_name):
-            if engine.name == 'mysql':
-                connection.execute(text(f"drop index {index['name']} on {trade_back_name}"))
-            else:
-                connection.execute(text(f"drop index {index['name']}"))
+    drop_index_on_table(engine, inspector, trade_back_name)
 
     order_id, trade_id = get_last_sequence_ids(engine, trade_back_name, order_back_name)
 
@@ -195,18 +206,45 @@ def migrate_orders_table(engine, table_back_name: str, cols_order: List):
 
     ft_fee_base = get_column_def(cols_order, 'ft_fee_base', 'null')
     average = get_column_def(cols_order, 'average', 'null')
+    stop_price = get_column_def(cols_order, 'stop_price', 'null')
 
     # sqlite does not support literals for booleans
     with engine.begin() as connection:
         connection.execute(text(f"""
             insert into orders (id, ft_trade_id, ft_order_side, ft_pair, ft_is_open, order_id,
             status, symbol, order_type, side, price, amount, filled, average, remaining, cost,
-            order_date, order_filled_date, order_update_date, ft_fee_base)
+            stop_price, order_date, order_filled_date, order_update_date, ft_fee_base)
             select id, ft_trade_id, ft_order_side, ft_pair, ft_is_open, order_id,
             status, symbol, order_type, side, price, amount, filled, {average} average, remaining,
-            cost, order_date, order_filled_date, order_update_date, {ft_fee_base} ft_fee_base
+            cost, {stop_price} stop_price, order_date, order_filled_date,
+            order_update_date, {ft_fee_base} ft_fee_base
             from {table_back_name}
             """))
+
+
+def migrate_pairlocks_table(
+        decl_base, inspector, engine,
+        pairlock_back_name: str, cols: List):
+
+    # Schema migration necessary
+    with engine.begin() as connection:
+        connection.execute(text(f"alter table pairlocks rename to {pairlock_back_name}"))
+
+    drop_index_on_table(engine, inspector, pairlock_back_name)
+
+    side = get_column_def(cols, 'side', "'*'")
+
+    # let SQLAlchemy create the schema as required
+    decl_base.metadata.create_all(engine)
+    # Copy data back - following the correct schema
+    with engine.begin() as connection:
+        connection.execute(text(f"""insert into pairlocks
+        (id, pair, side, reason, lock_time,
+         lock_end_time, active)
+        select id, pair, {side} side, reason, lock_time,
+         lock_end_time, active
+        from {pairlock_back_name}
+        """))
 
 
 def set_sqlite_to_wal(engine):
@@ -214,6 +252,35 @@ def set_sqlite_to_wal(engine):
         # Set Mode to
         with engine.begin() as connection:
             connection.execute(text("PRAGMA journal_mode=wal"))
+
+
+def fix_old_dry_orders(engine):
+    with engine.begin() as connection:
+        stmt = update(Order).where(
+            Order.ft_is_open.is_(True),
+            tuple_(Order.ft_trade_id, Order.order_id).not_in(
+                select(
+                    Trade.id, Trade.stoploss_order_id
+                ).where(Trade.stoploss_order_id.is_not(None))
+                  ),
+            Order.ft_order_side == 'stoploss',
+            Order.order_id.like('dry%'),
+
+        ).values(ft_is_open=False)
+        connection.execute(stmt)
+
+        stmt = update(Order).where(
+            Order.ft_is_open.is_(True),
+            tuple_(Order.ft_trade_id, Order.order_id).not_in(
+                select(
+                    Trade.id, Trade.open_order_id
+                ).where(Trade.open_order_id.is_not(None))
+                  ),
+            Order.ft_order_side != 'stoploss',
+            Order.order_id.like('dry%')
+
+        ).values(ft_is_open=False)
+        connection.execute(stmt)
 
 
 def check_migrate(engine, decl_base, previous_tables) -> None:
@@ -224,22 +291,32 @@ def check_migrate(engine, decl_base, previous_tables) -> None:
 
     cols_trades = inspector.get_columns('trades')
     cols_orders = inspector.get_columns('orders')
+    cols_pairlocks = inspector.get_columns('pairlocks')
     tabs = get_table_names_for_table(inspector, 'trades')
     table_back_name = get_backup_name(tabs, 'trades_bak')
     order_tabs = get_table_names_for_table(inspector, 'orders')
     order_table_bak_name = get_backup_name(order_tabs, 'orders_bak')
+    pairlock_tabs = get_table_names_for_table(inspector, 'pairlocks')
+    pairlock_table_bak_name = get_backup_name(pairlock_tabs, 'pairlocks_bak')
 
     # Check if migration necessary
     # Migrates both trades and orders table!
     # if ('orders' not in previous_tables
     # or not has_column(cols_orders, 'leverage')):
-    if not has_column(cols_trades, 'base_currency') or not has_column(cols_trades, 'hold_pct'):
+    if not has_column(cols_trades, 'stop_price') or not has_column(cols_trades, 'hold_pct'):
         logger.info(f"Running database migration for trades - "
                     f"backup: {table_back_name}, {order_table_bak_name}")
         migrate_trades_and_orders_table(
             decl_base, inspector, engine, table_back_name, cols_trades,
             order_table_bak_name, cols_orders)
 
+    if not has_column(cols_pairlocks, 'side'):
+        logger.info(f"Running database migration for pairlocks - "
+                    f"backup: {pairlock_table_bak_name}")
+
+        migrate_pairlocks_table(
+            decl_base, inspector, engine, pairlock_table_bak_name, cols_pairlocks
+        )
     if 'orders' not in previous_tables and 'trades' in previous_tables:
         raise OperationalException(
             "Your database seems to be very old. "
@@ -247,3 +324,4 @@ def check_migrate(engine, decl_base, previous_tables) -> None:
             "start with a fresh database.")
 
     set_sqlite_to_wal(engine)
+    fix_old_dry_orders(engine)

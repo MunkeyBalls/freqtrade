@@ -31,11 +31,13 @@ pair = "BTC/USDT"
 ```python
 # Load data using values set above
 from freqtrade.data.history import load_pair_history
+from freqtrade.enums import CandleType
 
 candles = load_pair_history(datadir=data_location,
                             timeframe=config["timeframe"],
                             pair=pair,
                             data_format = "hdf5",
+                            candle_type=CandleType.SPOT,
                             )
 
 # Confirm success

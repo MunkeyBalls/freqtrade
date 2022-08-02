@@ -9,10 +9,6 @@ Freqtrade is a free and open source crypto trading bot written in Python. It is 
 
 ![freqtrade](https://raw.githubusercontent.com/freqtrade/freqtrade/develop/docs/assets/freqtrade-screenshot.png)
 
-## Sponsored promotion
-
-[![tokenbot-promo](https://raw.githubusercontent.com/freqtrade/freqtrade/develop/docs/assets/TokenBot-Freqtrade-banner.png)](https://tokenbot.com/?utm_source=github&utm_medium=freqtrade&utm_campaign=algodevs)
-
 ## Disclaimer
 
 This software is for educational purposes only. Do not risk money which
@@ -38,6 +34,14 @@ Please read the [exchange specific notes](docs/exchanges.md) to learn about even
 - [X] [Kraken](https://kraken.com/)
 - [X] [OKX](https://okx.com/) (Former OKEX)
 - [ ] [potentially many others](https://github.com/ccxt/ccxt/). _(We cannot guarantee they will work)_
+
+### Supported Futures Exchanges (experimental)
+
+- [X] [Binance](https://www.binance.com/)
+- [X] [Gate.io](https://www.gate.io/ref/6266643)
+- [X] [OKX](https://okx.com/).
+
+Please make sure to read the [exchange specific notes](docs/exchanges.md), as well as the [trading with leverage](docs/leverage.md) documentation before diving in.
 
 ### Community tested
 
@@ -189,7 +193,7 @@ Issues labeled [good first issue](https://github.com/freqtrade/freqtrade/labels/
 
 The clock must be accurate, synchronized to a NTP server very frequently to avoid problems with communication to the exchanges.
 
-### Min hardware required
+### Minimum hardware required
 
 To run this bot we recommend you a cloud instance with a minimum of:
 

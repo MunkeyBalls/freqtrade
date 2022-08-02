@@ -183,11 +183,11 @@ class AwesomeStrategy(IStrategy):
 
 ``` python hl_lines="2 6"
 class AwesomeStrategy(IStrategy):
-    def check_entry_timeout(self, pair: str, trade: 'Trade', order: dict, 
+    def check_entry_timeout(self, pair: str, trade: 'Trade', order: 'Order', 
                             current_time: datetime, **kwargs) -> bool:
         return False
 
-    def check_exit_timeout(self, pair: str, trade: 'Trade', order: dict, 
+    def check_exit_timeout(self, pair: str, trade: 'Trade', order: 'Order', 
                             current_time: datetime, **kwargs) -> bool:
         return False 
 ```
@@ -199,7 +199,7 @@ New string argument `side` - which can be either `"long"` or `"short"`.
 ``` python hl_lines="4"
 class AwesomeStrategy(IStrategy):
     def custom_stake_amount(self, pair: str, current_time: datetime, current_rate: float,
-                            proposed_stake: float, min_stake: float, max_stake: float,
+                            proposed_stake: float, min_stake: Optional[float], max_stake: float,
                             entry_tag: Optional[str], **kwargs) -> float:
         # ... 
         return proposed_stake
@@ -208,7 +208,7 @@ class AwesomeStrategy(IStrategy):
 ``` python hl_lines="4"
 class AwesomeStrategy(IStrategy):
     def custom_stake_amount(self, pair: str, current_time: datetime, current_rate: float,
-                            proposed_stake: float, min_stake: float, max_stake: float,
+                            proposed_stake: float, min_stake: Optional[float], max_stake: float,
                             entry_tag: Optional[str], side: str, **kwargs) -> float:
         # ... 
         return proposed_stake

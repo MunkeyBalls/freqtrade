@@ -83,6 +83,11 @@ AVAILABLE_CLI_OPTIONS = {
         help='Reset sample files to their original state.',
         action='store_true',
     ),
+    "recursive_strategy_search": Arg(
+        '--recursive-strategy-search',
+        help='Recursively search for a strategy in the strategies folder.',
+        action='store_true',
+    ),
     # Main options
     "strategy": Arg(
         '-s', '--strategy',
@@ -99,6 +104,11 @@ AVAILABLE_CLI_OPTIONS = {
         help=f'Override trades database URL, this is useful in custom deployments '
         f'(default: `{constants.DEFAULT_DB_PROD_URL}` for Live Run mode, '
         f'`{constants.DEFAULT_DB_DRYRUN_URL}` for Dry Run).',
+        metavar='PATH',
+    ),
+    "db_url_from": Arg(
+        '--db-url-from',
+        help='Source db url to use when migrating a database.',
         metavar='PATH',
     ),
     "sd_notify": Arg(
@@ -438,6 +448,11 @@ AVAILABLE_CLI_OPTIONS = {
         default=['1m', '5m'],
         nargs='+',
     ),
+    "prepend_data": Arg(
+        '--prepend',
+        help='Allow data prepending.',
+        action='store_true',
+    ),
     "erase": Arg(
         '--erase',
         help='Clean all existing data for the selected exchange/pairs/timeframes.',
@@ -598,5 +613,38 @@ AVAILABLE_CLI_OPTIONS = {
         help=("Suppress errors for any requested Hyperopt spaces "
               "that do not contain any parameters."),
         action="store_true",
+    ),
+    "analysis_groups": Arg(
+        "--analysis-groups",
+        help=("grouping output - "
+              "0: simple wins/losses by enter tag, "
+              "1: by enter_tag, "
+              "2: by enter_tag and exit_tag, "
+              "3: by pair and enter_tag, "
+              "4: by pair, enter_ and exit_tag (this can get quite large)"),
+        nargs='+',
+        default=['0', '1', '2'],
+        choices=['0', '1', '2', '3', '4'],
+    ),
+    "enter_reason_list": Arg(
+        "--enter-reason-list",
+        help=("Comma separated list of entry signals to analyse. Default: all. "
+              "e.g. 'entry_tag_a,entry_tag_b'"),
+        nargs='+',
+        default=['all'],
+    ),
+    "exit_reason_list": Arg(
+        "--exit-reason-list",
+        help=("Comma separated list of exit signals to analyse. Default: all. "
+              "e.g. 'exit_tag_a,roi,stop_loss,trailing_stop_loss'"),
+        nargs='+',
+        default=['all'],
+    ),
+    "indicator_list": Arg(
+        "--indicator-list",
+        help=("Comma separated list of indicators to analyse. "
+              "e.g. 'close,rsi,bb_lowerband,profit_abs'"),
+        nargs='+',
+        default=[],
     ),
 }
