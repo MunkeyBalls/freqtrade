@@ -99,6 +99,7 @@ def migrate_trades_and_orders_table(
     trail_pct = get_column_def(cols, 'trail_pct', '0.0')
 
     enter_tag = get_column_def(cols, 'buy_tag', get_column_def(cols, 'enter_tag', 'null'))
+    realized_profit = get_column_def(cols, 'realized_profit', '0.0')
 
     trading_mode = get_column_def(cols, 'trading_mode', 'null')
 
@@ -159,7 +160,7 @@ def migrate_trades_and_orders_table(
             max_rate, min_rate, exit_reason, exit_order_status, strategy, enter_tag,
             timeframe, open_trade_value, close_profit_abs,
             trading_mode, leverage, liquidation_price, is_short,
-            interest_rate, funding_fees, hold_pct, trail_pct
+            interest_rate, funding_fees, realized_profit, hold_pct, trail_pct
             )
         select id, lower(exchange), pair, {base_currency} base_currency,
             {stake_currency} stake_currency,
@@ -185,7 +186,8 @@ def migrate_trades_and_orders_table(
             {open_trade_value} open_trade_value, {close_profit_abs} close_profit_abs,
             {trading_mode} trading_mode, {leverage} leverage, {liquidation_price} liquidation_price,
             {is_short} is_short, {interest_rate} interest_rate,
-            {funding_fees} funding_fees, {hold_pct} hold_pct, {trail_pct} trail_pct
+            {funding_fees} funding_fees, {realized_profit} realized_profit, 
+            {hold_pct} hold_pct, {trail_pct} trail_pct
             from {trade_back_name}
             """))
 
@@ -303,7 +305,7 @@ def check_migrate(engine, decl_base, previous_tables) -> None:
     # Migrates both trades and orders table!
     # if ('orders' not in previous_tables
     # or not has_column(cols_orders, 'leverage')):
-    if not has_column(cols_trades, 'stop_price') or not has_column(cols_trades, 'hold_pct'):
+    if not has_column(cols_trades, 'realized_profit') or not has_column(cols_trades, 'hold_pct'):
         logger.info(f"Running database migration for trades - "
                     f"backup: {table_back_name}, {order_table_bak_name}")
         migrate_trades_and_orders_table(
