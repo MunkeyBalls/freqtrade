@@ -513,8 +513,8 @@ class FreqtradeBot(LoggingMixin):
         # Walk through each pair and check if it needs changes
         for trade in Trade.get_open_trades():
             # If there is any open orders, wait for them to finish.
-            if (trade.open_order_id is None
-                and (trade.hold_pct is None or trade.hold_pct == 0)):
+            if (trade.open_order_id is None):
+                #and (trade.hold_pct is None or trade.hold_pct == 0)): # Disabled skipping position adjust when holding
                 try:
                     self.check_and_call_adjust_trade_position(trade)
                 except DependencyException as exception:
