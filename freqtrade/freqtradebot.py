@@ -1027,7 +1027,7 @@ class FreqtradeBot(LoggingMixin):
         # Block if exit order pending
         open_exit_count = len([order for order in trade.orders if order.status == 'open' and order.side == trade.exit_side])
         if open_exit_count:
-            logger.warning(f'{open_entry_count} open exit orders for {trade.pair} already exists ')
+            logger.warning(f'{open_exit_count} open exit orders for {trade.pair} already exists ')
             return False
 
         # Debuggery
