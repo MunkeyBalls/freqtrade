@@ -1025,13 +1025,13 @@ class FreqtradeBot(LoggingMixin):
             return False
 
         # Block if exit order pending
-        open_exit_count = len([order for order in trade.orders if order.status == 'open' and order.side(trade.exit_side)])
+        open_exit_count = len([order for order in trade.orders if order.status == 'open' and order.side == trade.exit_side])
         if open_exit_count:
             logger.warning(f'{open_entry_count} open exit orders for {trade.pair} already exists ')
             return False
 
         # Debuggery
-        open_entry_count = len([order for order in trade.orders if order.status == 'open' and order.side(trade.exit_side)])
+        open_entry_count = len([order for order in trade.orders if order.status == 'open' and order.side == trade.entry_side])
         if open_entry_count:
             logger.warning(f'{open_entry_count} open entry orders for {trade.pair} already exists ')
 
