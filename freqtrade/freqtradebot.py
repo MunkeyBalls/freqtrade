@@ -513,8 +513,7 @@ class FreqtradeBot(LoggingMixin):
         # Walk through each pair and check if it needs changes
         for trade in Trade.get_open_trades():
             # If there is any open orders, wait for them to finish.
-            if (trade.open_order_id is None):
-                #and (trade.hold_pct is None or trade.hold_pct == 0)): # Disabled skipping position adjust when holding
+            if trade.open_order_id is None:
                 try:
                     self.check_and_call_adjust_trade_position(trade)
                 except DependencyException as exception:
@@ -724,8 +723,7 @@ class FreqtradeBot(LoggingMixin):
         funding_fees = self.exchange.get_funding_fees(
             pair=pair, amount=amount, is_short=is_short, open_date=open_date)
         # This is a new trade
-        if (trade is None or 
-            (trade.hold_pct is not None and trade.hold_pct != 0)):
+        if trade is None:
             trade = Trade(
                 pair=pair,
                 base_currency=base_currency,
