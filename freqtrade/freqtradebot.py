@@ -1000,7 +1000,7 @@ class FreqtradeBot(LoggingMixin):
                     Trade.commit()
                     continue
                 # Check if we can sell our current pair
-                if trade.open_order_id is None and trade.is_open and self.handle_trade(trade):
+                if self.allow_exit_trade(trade) and self.handle_trade(trade):
                     trades_closed += 1
 
             except DependencyException as exception:
@@ -1011,6 +1011,47 @@ class FreqtradeBot(LoggingMixin):
             self.wallets.update()
 
         return trades_closed
+
+    def allow_exit_trade(self, trade: Trade) -> bool:
+        
+        if not trade.is_open:
+            return False
+
+        if trade.open_order_id is None:
+            return True
+        
+        # Don't sell the initial order before it's filled
+        if trade.nr_of_successful_entries == 0:
+            return False
+
+        # Block if exit order pending
+        open_exit_count = len([order for order in trade.orders if order.status == 'open' and order.side(trade.exit_side)])
+        if open_exit_count:
+            logger.warning(f'{open_entry_count} open exit orders for {trade.pair} already exists ')
+            return False
+
+        # Debuggery
+        open_entry_count = len([order for order in trade.orders if order.status == 'open' and order.side(trade.exit_side)])
+        if open_entry_count:
+            logger.warning(f'{open_entry_count} open entry orders for {trade.pair} already exists ')
+
+        return True
+
+
+    def cancel_open_entries(self, trade: Trade) -> bool:
+        """
+        Cancel open entries for trade
+        """      
+        if trade.open_order_id:
+            for order in trade.orders:
+                if order.ft_is_open and order['side'] == trade.entry_side:
+                        fully_canceled = self._freqtrade.handle_cancel_enter(
+                            trade, order, constants.CANCEL_REASON['FORCE_EXIT'])
+        else:
+            fully_canceled = True
+        
+        return fully_canceled
+        
 
     def handle_trade(self, trade: Trade) -> bool:
         """
@@ -1063,6 +1104,7 @@ class FreqtradeBot(LoggingMixin):
         for should_exit in exits:
             if should_exit.exit_flag:
                 exit_tag1 = exit_tag if should_exit.exit_type == ExitType.EXIT_SIGNAL else None
+                self.cancel_open_entries(trade)
                 logger.info(f'Exit for {trade.pair} detected. Reason: {should_exit.exit_type}'
                             f'{f" Tag: {exit_tag1}" if exit_tag1 is not None else ""}')
                 exited = self.execute_trade_exit(trade, exit_rate, should_exit, exit_tag=exit_tag1)
