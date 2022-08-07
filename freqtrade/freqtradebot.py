@@ -1012,26 +1012,16 @@ class FreqtradeBot(LoggingMixin):
 
     def allow_exit_trade(self, trade: Trade) -> bool:
         
-        if not trade.is_open:
+        if not trade.is_open or trade.nr_of_successful_entries == 0:
             return False
 
         if trade.open_order_id is None:
-            return True
-        
-        # Don't sell the initial order before it's filled
-        if trade.nr_of_successful_entries == 0:
-            return False
+            return True        
 
-        # Block if exit order pending
+        # Block if exit order pending, allow if only entries
         open_exit_count = len([order for order in trade.orders if order.status == 'open' and order.side == trade.exit_side])
         if open_exit_count:
-            #logger.warning(f'{open_exit_count} open exit orders for {trade.pair} already exists ')
             return False
-
-        # Debuggery
-        #open_entry_count = len([order for order in trade.orders if order.status == 'open' and order.side == trade.entry_side])
-        #if open_entry_count:
-        #    logger.warning(f'{open_entry_count} open entry orders for {trade.pair} already exists ')
 
         return True
 
@@ -1100,7 +1090,7 @@ class FreqtradeBot(LoggingMixin):
         for should_exit in exits:
             if should_exit.exit_flag:
                 exit_tag1 = exit_tag if should_exit.exit_type == ExitType.EXIT_SIGNAL else None
-                self.cancel_open_entries(trade)
+                #self.cancel_open_entries(trade)
                 logger.info(f'Exit for {trade.pair} detected. Reason: {should_exit.exit_type}'
                             f'{f" Tag: {exit_tag1}" if exit_tag1 is not None else ""}')
                 exited = self.execute_trade_exit(trade, exit_rate, should_exit, exit_tag=exit_tag1)
@@ -1633,6 +1623,8 @@ class FreqtradeBot(LoggingMixin):
             logger.info(f"Aborted selling {trade.pair} because of active hold")
             return False
 
+        # Cancel any remaining open entries
+        self.cancel_open_entries()
 
         try:
             # Execute sell and update trade record
