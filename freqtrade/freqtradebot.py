@@ -1624,7 +1624,7 @@ class FreqtradeBot(LoggingMixin):
             return False
 
         # Cancel any remaining open entries
-        self.cancel_open_entries()
+        self.cancel_open_entries(trade)
 
         try:
             # Execute sell and update trade record
