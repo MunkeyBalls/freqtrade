@@ -122,6 +122,7 @@ class Telegram(RPCHandler):
                                  r'/stopbuy$', r'/reload_config$', r'/show_config$',
                                  r'/logs$', r'/whitelist$', r'/blacklist$', r'/bl_delete$',                                 
                                  r'/split$', r'/trail$', r'/hold$', r'/max_trades$',
+                                 r'/cancel_entries$', r'/list_entries$',
                                  r'/weekly$', r'/weekly \d+$', r'/monthly$', r'/monthly \d+$',
                                  r'/forcebuy$', r'/forcelong$', r'/forceshort$',
                                  r'/forcesell$', r'/forceexit$',
@@ -197,6 +198,7 @@ class Telegram(RPCHandler):
             CommandHandler('trail', self._update_trail),
             CommandHandler('max_trades', self._max_trades),
             CommandHandler('reset_trade', self._reset_trade),
+            CommandHandler('cancel_entries', self._cancel_open_entries),
         ]
         callbacks = [
             CallbackQueryHandler(self._status_table, pattern='update_status_table'),
@@ -1149,7 +1151,24 @@ class Telegram(RPCHandler):
 
         except RPCException as e:
             self._send_msg(str(e))
-            
+
+    @authorized_only
+    def _cancel_open_entries(self, update: Update, context: CallbackContext) -> None:
+        """
+        Handler for /cancel_entries <id>.
+        Cancels open entries for specific trade
+        :param bot: telegram bot
+        :param update: message update
+        :return: None
+        """
+
+        if context.args:
+            trade_id = context.args[0]
+            try:
+                self._rpc._rpc_cancel_open_entries(trade_id)            
+            except RPCException:
+                self._send_msg(msg='No open trade found.')
+                return
 
     @authorized_only
     def _force_exit(self, update: Update, context: CallbackContext) -> None:

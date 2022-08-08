@@ -864,6 +864,20 @@ class RPC:
         self._freqtrade.config['max_open_trades'] = int(slots)
         return {'result': f'Set amount of slots to {slots}.'}
 
+    def _rpc_cancel_open_entries(self, trade_id: str) -> Dict[str, str]:
+        """"
+        Cancel open entries
+        """   
+        trade = Trade.get_trades(
+            trade_filter=[Trade.id == trade_id, Trade.is_open.is_(True), ]
+        ).first()
+        if not trade:
+            logger.warning('cancel_open_entries: Invalid argument received')
+            raise RPCException('invalid argument')
+        
+        self._freqtrade.cancel_open_entries(trade)        
+        return {'result': f'Cancelled open entries for trade {trade_id}.'}
+
     def _rpc_force_exit(self, trade_id: str, ordertype: Optional[str] = None) -> Dict[str, str]:
         """
         Handler for forceexit <id>.
@@ -999,7 +1013,9 @@ class RPC:
             # Try cancelling regular order if that exists
             if trade.open_order_id:
                 try:
+                    #cancel all open orders
                     self._freqtrade.exchange.cancel_order(trade.open_order_id, trade.pair)
+                    #self._freqtrade.cancel_open_entries(trade)
                     c_count += 1
                 except (ExchangeError):
                     pass
