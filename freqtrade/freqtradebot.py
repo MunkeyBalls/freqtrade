@@ -1037,7 +1037,7 @@ class FreqtradeBot(LoggingMixin):
                     orderDict = self.exchange.fetch_order(order.order_id, trade.pair)                    
                     fully_canceled = self.handle_cancel_enter(
                         trade, orderDict, constants.CANCEL_REASON['FORCE_EXIT'])
-                    logger.warning(f'Cancelling open entry {trade.pair} - {order.order_id} - {fully_canceled}')    
+                    logger.warning(f'Cancelling open entry {trade.pair} - {order.order_id} - {fully_canceled}')         
         return fully_canceled
 
     def cancel_open_orders(self, trade: Trade) -> bool:
@@ -1436,7 +1436,7 @@ class FreqtradeBot(LoggingMixin):
             else:
                 # FIXME TODO: This could possibly reworked to not duplicate the code 15 lines below.
                 self.update_trade_state(trade, trade.open_order_id, corder)
-                trade.open_order_id = None
+                trade.open_order_id = next((order for order in trade.orders if order.status == 'open'), None)
                 logger.info(f'{side} Order timeout for {trade}.')
         else:
             # if trade is partially complete, edit the stake details for the trade
@@ -1451,7 +1451,7 @@ class FreqtradeBot(LoggingMixin):
             trade.stake_amount = trade.amount * trade.open_rate / trade.leverage
             self.update_trade_state(trade, trade.open_order_id, corder)
 
-            trade.open_order_id = None
+            trade.open_order_id = next((order for order in trade.orders if order.status == 'open'), None)
             logger.info(f'Partial {trade.entry_side} order timeout for {trade}.')
             reason += f", {constants.CANCEL_REASON['PARTIALLY_FILLED']}"
 
