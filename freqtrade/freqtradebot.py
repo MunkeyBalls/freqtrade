@@ -1436,7 +1436,7 @@ class FreqtradeBot(LoggingMixin):
             else:
                 # FIXME TODO: This could possibly reworked to not duplicate the code 15 lines below.
                 self.update_trade_state(trade, trade.open_order_id, corder)
-                trade.open_order_id = next((order for order in trade.orders if order.status == 'open'), None)
+                trade.open_order_id = next((orderLoc for orderLoc in trade.orders if orderLoc.status == 'open' and orderLoc.order_id != order.order_id), None)
                 logger.info(f'{side} Order timeout for {trade}.')
         else:
             # if trade is partially complete, edit the stake details for the trade
@@ -1451,7 +1451,7 @@ class FreqtradeBot(LoggingMixin):
             trade.stake_amount = trade.amount * trade.open_rate / trade.leverage
             self.update_trade_state(trade, trade.open_order_id, corder)
 
-            trade.open_order_id = next((order for order in trade.orders if order.status == 'open'), None)
+            trade.open_order_id = next((orderLoc for orderLoc in trade.orders if orderLoc.status == 'open' and orderLoc.order_id != order.order_id), None)
             logger.info(f'Partial {trade.entry_side} order timeout for {trade}.')
             reason += f", {constants.CANCEL_REASON['PARTIALLY_FILLED']}"
 
