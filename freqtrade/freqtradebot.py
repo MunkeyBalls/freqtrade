@@ -26,7 +26,7 @@ from freqtrade.exchange import timeframe_to_minutes, timeframe_to_seconds
 from freqtrade.exchange.exchange import timeframe_to_next_date
 from freqtrade.misc import safe_value_fallback, safe_value_fallback2
 from freqtrade.mixins import LoggingMixin
-from freqtrade.persistence import Order, PairLocks, Trade, cleanup_db, init_db
+from freqtrade.persistence import Order, PairLocks, Trade, init_db
 from freqtrade.plugins.pairlistmanager import PairListManager
 from freqtrade.plugins.protectionmanager import ProtectionManager
 from freqtrade.resolvers import ExchangeResolver, StrategyResolver
@@ -150,7 +150,7 @@ class FreqtradeBot(LoggingMixin):
         self.check_for_open_trades()
 
         self.rpc.cleanup()
-        cleanup_db()
+        Trade.commit()
         self.exchange.close()
 
     def startup(self) -> None:
@@ -624,7 +624,8 @@ class FreqtradeBot(LoggingMixin):
         ordertype: Optional[str] = None,
         enter_tag: Optional[str] = None,
         trade: Optional[Trade] = None,
-        order_adjust: bool = False
+        order_adjust: bool = False,
+        leverage_: Optional[float] = None,
     ) -> bool:
         """
         Executes a limit buy for the given pair
@@ -640,7 +641,7 @@ class FreqtradeBot(LoggingMixin):
         pos_adjust = trade is not None
 
         enter_limit_requested, stake_amount, leverage = self.get_valid_enter_price_and_stake(
-            pair, price, stake_amount, trade_side, enter_tag, trade, order_adjust)
+            pair, price, stake_amount, trade_side, enter_tag, trade, order_adjust, leverage_)
 
         if not stake_amount:
             return False
@@ -816,6 +817,7 @@ class FreqtradeBot(LoggingMixin):
         entry_tag: Optional[str],
         trade: Optional[Trade],
         order_adjust: bool,
+        leverage_: Optional[float],
     ) -> Tuple[float, float, float]:
 
         if price:
@@ -838,16 +840,19 @@ class FreqtradeBot(LoggingMixin):
         if not enter_limit_requested:
             raise PricingError('Could not determine entry price.')
 
-        if trade is None:
+        if self.trading_mode != TradingMode.SPOT and trade is None:
             max_leverage = self.exchange.get_max_leverage(pair, stake_amount)
-            leverage = strategy_safe_wrapper(self.strategy.leverage, default_retval=1.0)(
-                pair=pair,
-                current_time=datetime.now(timezone.utc),
-                current_rate=enter_limit_requested,
-                proposed_leverage=1.0,
-                max_leverage=max_leverage,
-                side=trade_side, entry_tag=entry_tag,
-            ) if self.trading_mode != TradingMode.SPOT else 1.0
+            if leverage_:
+                leverage = leverage_
+            else:
+                leverage = strategy_safe_wrapper(self.strategy.leverage, default_retval=1.0)(
+                    pair=pair,
+                    current_time=datetime.now(timezone.utc),
+                    current_rate=enter_limit_requested,
+                    proposed_leverage=1.0,
+                    max_leverage=max_leverage,
+                    side=trade_side, entry_tag=entry_tag,
+                )
             # Cap leverage between 1.0 and max_leverage.
             leverage = min(max(leverage, 1.0), max_leverage)
         else:
@@ -1872,7 +1877,6 @@ class FreqtradeBot(LoggingMixin):
         self.handle_order_fee(trade, order_obj, order)
 
         trade.update_trade(order_obj)
-        Trade.commit()
 
         if order.get('status') in constants.NON_OPEN_EXCHANGE_STATES:
             # If a entry order was closed, force update on stoploss on exchange
@@ -1896,6 +1900,7 @@ class FreqtradeBot(LoggingMixin):
 
             # Updating wallets when order is closed
             self.wallets.update()
+        Trade.commit()
 
         self.order_close_notify(trade, order_obj, stoploss_order, send_msg)
 

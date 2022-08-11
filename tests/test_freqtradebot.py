@@ -75,7 +75,7 @@ def test_process_calls_sendmsg(mocker, default_conf_usdt) -> None:
 
 
 def test_bot_cleanup(mocker, default_conf_usdt, caplog) -> None:
-    mock_cleanup = mocker.patch('freqtrade.freqtradebot.cleanup_db')
+    mock_cleanup = mocker.patch('freqtrade.freqtradebot.Trade.commit')
     coo_mock = mocker.patch('freqtrade.freqtradebot.FreqtradeBot.cancel_all_open_orders')
     freqtrade = get_patched_freqtradebot(mocker, default_conf_usdt)
     freqtrade.cleanup()
@@ -972,6 +972,14 @@ def test_execute_entry(mocker, default_conf_usdt, fee, limit_order,
     trade = Trade.query.all()[9]
     trade.is_short = is_short
     assert pytest.approx(trade.stake_amount) == 500
+
+    order['id'] = '55673'
+
+    freqtrade.strategy.leverage.reset_mock()
+    assert freqtrade.execute_entry(pair, 200, leverage_=3)
+    assert freqtrade.strategy.leverage.call_count == 0
+    trade = Trade.query.all()[10]
+    assert trade.leverage == 1 if trading_mode == 'spot' else 3
 
 
 @pytest.mark.parametrize("is_short", [False, True])

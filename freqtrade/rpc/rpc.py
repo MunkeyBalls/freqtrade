@@ -240,12 +240,15 @@ class RPC:
                         trade.pair, side='exit', is_short=trade.is_short, refresh=False)
                 except (PricingError, ExchangeError):
                     current_rate = NAN
-                if len(trade.select_filled_orders(trade.entry_side)) > 0:
-                    trade_profit = trade.calc_profit(current_rate)
-                    profit_str = f'{trade.calc_profit_ratio(current_rate):.2%}'
+                    trade_profit = NAN
+                    profit_str = f'{NAN:.2%}'
                 else:
-                    trade_profit = 0.0
-                    profit_str = f'{0.0:.2f}'
+                    if trade.nr_of_successful_entries > 0:
+                        trade_profit = trade.calc_profit(current_rate)
+                        profit_str = f'{trade.calc_profit_ratio(current_rate):.2%}'
+                    else:
+                        trade_profit = 0.0
+                        profit_str = f'{0.0:.2f}'
                 direction_str = ('S' if trade.is_short else 'L') if nonspot else ''
                 if self._fiat_converter:
                     fiat_profit = self._fiat_converter.convert_amount(
@@ -594,8 +597,6 @@ class RPC:
         for trade in trades:
             current_rate: float = 0.0
 
-            if not trade.open_rate:
-                continue
             if trade.close_date:
                 durations.append((trade.close_date - trade.open_date).total_seconds())
 
@@ -617,9 +618,13 @@ class RPC:
                         trade.pair, side='exit', is_short=trade.is_short, refresh=False)
                 except (PricingError, ExchangeError):
                     current_rate = NAN
-                profit_ratio = trade.calc_profit_ratio(rate=current_rate)
-                profit_abs = trade.calc_profit(
-                    rate=trade.close_rate or current_rate) + trade.realized_profit
+                if isnan(current_rate):
+                    profit_ratio = NAN
+                    profit_abs = NAN
+                else:
+                    profit_ratio = trade.calc_profit_ratio(rate=current_rate)
+                    profit_abs = trade.calc_profit(
+                        rate=trade.close_rate or current_rate) + trade.realized_profit
 
             profit_all_coin.append(profit_abs)
             profit_all_ratio.append(profit_ratio)
@@ -878,36 +883,48 @@ class RPC:
         self._freqtrade.cancel_open_entries(trade)        
         return {'result': f'Cancelled open entries for trade {trade_id}.'}
 
-    def _rpc_force_exit(self, trade_id: str, ordertype: Optional[str] = None) -> Dict[str, str]:
+    def __exec_force_exit(self, trade: Trade, ordertype: Optional[str],
+                          amount: Optional[float] = None) -> None:
+        # Check if there is there is an open order
+        fully_canceled = False
+        if trade.open_order_id:
+            order = self._freqtrade.exchange.fetch_order(trade.open_order_id, trade.pair)
+
+            if order['side'] == trade.entry_side:
+                fully_canceled = self._freqtrade.handle_cancel_enter(
+                    trade, order, CANCEL_REASON['FORCE_EXIT'])
+
+            if order['side'] == trade.exit_side:
+                # Cancel order - so it is placed anew with a fresh price.
+                self._freqtrade.handle_cancel_exit(trade, order, CANCEL_REASON['FORCE_EXIT'])
+
+        if not fully_canceled:
+            # Get current rate and execute sell
+            current_rate = self._freqtrade.exchange.get_rate(
+                trade.pair, side='exit', is_short=trade.is_short, refresh=True)
+            exit_check = ExitCheckTuple(exit_type=ExitType.FORCE_EXIT)
+            order_type = ordertype or self._freqtrade.strategy.order_types.get(
+                "force_exit", self._freqtrade.strategy.order_types["exit"])
+            sub_amount: Optional[float] = None
+            if amount and amount < trade.amount:
+                # Partial exit ...
+                min_exit_stake = self._freqtrade.exchange.get_min_pair_stake_amount(
+                    trade.pair, current_rate, trade.stop_loss_pct)
+                remaining = (trade.amount - amount) * current_rate
+                if remaining < min_exit_stake:
+                    raise RPCException(f'Remaining amount of {remaining} would be too small.')
+                sub_amount = amount
+
+            self._freqtrade.execute_trade_exit(
+                trade, current_rate, exit_check, ordertype=order_type,
+                sub_trade_amt=sub_amount)
+
+    def _rpc_force_exit(self, trade_id: str, ordertype: Optional[str] = None, *,
+                        amount: Optional[float] = None) -> Dict[str, str]:
         """
         Handler for forceexit <id>.
         Sells the given trade at current price
         """
-        def _exec_force_exit(trade: Trade) -> None:
-            # Check if there is there is an open order
-            fully_canceled = False
-            if trade.open_order_id:
-                order = self._freqtrade.exchange.fetch_order(trade.open_order_id, trade.pair)
-
-                if order['side'] == trade.entry_side:
-                    fully_canceled = self._freqtrade.handle_cancel_enter(
-                        trade, order, CANCEL_REASON['FORCE_EXIT'])
-
-                if order['side'] == trade.exit_side:
-                    # Cancel order - so it is placed anew with a fresh price.
-                    self._freqtrade.handle_cancel_exit(trade, order, CANCEL_REASON['FORCE_EXIT'])
-
-            if not fully_canceled:
-                # Get current rate and execute sell
-                current_rate = self._freqtrade.exchange.get_rate(
-                    trade.pair, side='exit', is_short=trade.is_short, refresh=True)
-                exit_check = ExitCheckTuple(exit_type=ExitType.FORCE_EXIT)
-                order_type = ordertype or self._freqtrade.strategy.order_types.get(
-                    "force_exit", self._freqtrade.strategy.order_types["exit"])
-
-                self._freqtrade.execute_trade_exit(
-                    trade, current_rate, exit_check, ordertype=order_type)
-        # ---- EOF def _exec_forcesell ----
 
         if self._freqtrade.state != State.RUNNING:
             raise RPCException('trader is not running')
@@ -916,7 +933,7 @@ class RPC:
             if trade_id == 'all':
                 # Execute sell for all open orders
                 for trade in Trade.get_open_trades():
-                    _exec_force_exit(trade)
+                    self.__exec_force_exit(trade, ordertype)
                 Trade.commit()
                 self._freqtrade.wallets.update()
                 return {'result': 'Created sell orders for all open trades.'}
@@ -929,7 +946,7 @@ class RPC:
                 logger.warning('force_exit: Invalid argument received')
                 raise RPCException('invalid argument')
 
-            _exec_force_exit(trade)
+            self.__exec_force_exit(trade, ordertype, amount)
             Trade.commit()
             self._freqtrade.wallets.update()
             return {'result': f'Created sell order for trade {trade_id}.'}
@@ -938,7 +955,8 @@ class RPC:
                          order_type: Optional[str] = None,
                          order_side: SignalDirection = SignalDirection.LONG,
                          stake_amount: Optional[float] = None,
-                         enter_tag: Optional[str] = 'force_entry') -> Optional[Trade]:
+                         enter_tag: Optional[str] = 'force_entry',
+                         leverage: Optional[float] = None) -> Optional[Trade]:
         """
         Handler for forcebuy <asset> <price>
         Buys a pair trade at the given or current price
@@ -991,6 +1009,7 @@ class RPC:
                                          ordertype=order_type, trade=trade,
                                          is_short=is_short,
                                          enter_tag=enter_tag,
+                                         leverage_=leverage,
                                          ):
             Trade.commit()
             trade = Trade.get_trades([Trade.is_open.is_(True), Trade.pair == pair]).first()
@@ -1125,7 +1144,7 @@ class RPC:
             lock.active = False
             lock.lock_end_time = datetime.now(timezone.utc)
 
-        PairLock.query.session.commit()
+        Trade.commit()
 
         return self._rpc_locks()
 
