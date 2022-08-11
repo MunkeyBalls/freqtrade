@@ -606,7 +606,7 @@ class LocalTrade():
                 logger.info(f'{order.order_type.upper()}_{payment} has been fulfilled for {self}.')
             # condition to avoid reset value when updating fees
             if self.open_order_id == order.order_id:
-                self.open_order_id = next((orderLoc for orderLoc in self.orders if orderLoc.status == 'open' and orderLoc.order_id != order.order_id), None)
+                self.open_order_id = next((orderLoc.order_id for orderLoc in self.orders if orderLoc.status == 'open' and orderLoc.order_id != order.order_id), None)
             else:
                 logger.warning(
                     f'Got different open_order_id {self.open_order_id} != {order.order_id}')
@@ -618,7 +618,7 @@ class LocalTrade():
                 logger.info(f'{order.order_type.upper()}_{payment} has been fulfilled for {self}.')
             # condition to avoid reset value when updating fees
             if self.open_order_id == order.order_id:
-                self.open_order_id = next((orderLoc for orderLoc in self.orders if orderLoc.status == 'open' and orderLoc.order_id != order.order_id), None)
+                self.open_order_id = next((orderLoc.order_id for orderLoc in self.orders if orderLoc.status == 'open' and orderLoc.order_id != order.order_id), None)
             else:
                 logger.warning(
                     f'Got different open_order_id {self.open_order_id} != {order.order_id}')

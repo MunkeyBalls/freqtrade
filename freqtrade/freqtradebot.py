@@ -1030,14 +1030,15 @@ class FreqtradeBot(LoggingMixin):
         """
         Cancel open entries for trade
         """        
-        fully_canceled = True
+        fully_canceled = True        
+        logger.warning(f'Enter cancel open entry {trade.pair} open: {trade.open_order_id}')
         if trade.open_order_id:
             for order in trade.orders:
                 if order.ft_is_open and order.side == trade.entry_side:
                     orderDict = self.exchange.fetch_order(order.order_id, trade.pair)                    
                     fully_canceled = self.handle_cancel_enter(
                         trade, orderDict, constants.CANCEL_REASON['FORCE_EXIT'])
-                    logger.warning(f'Cancelling open entry {trade.pair} - {order.order_id} - {fully_canceled}')         
+                    logger.warning(f'Cancelling open entry {trade.id} {trade.pair} {order.order_id} price={order.price} full_cancelled={fully_canceled}')
         return fully_canceled
 
     def cancel_open_orders(self, trade: Trade) -> bool:
@@ -1436,7 +1437,10 @@ class FreqtradeBot(LoggingMixin):
             else:
                 # FIXME TODO: This could possibly reworked to not duplicate the code 15 lines below.
                 self.update_trade_state(trade, trade.open_order_id, corder)
-                trade.open_order_id = next((orderLoc for orderLoc in trade.orders if orderLoc.status == 'open' and orderLoc.order_id != order.order_id), None)
+                logger.warning(f'Order data: {order}')
+                trade.open_order_id = next((orderLoc.order_id for orderLoc in trade.orders if orderLoc.status == 'open' and orderLoc.order_id != order['id']), None)
+                logger.warning(f'Modified open order id to {trade.open_order_id}')
+                
                 logger.info(f'{side} Order timeout for {trade}.')
         else:
             # if trade is partially complete, edit the stake details for the trade
@@ -1450,8 +1454,9 @@ class FreqtradeBot(LoggingMixin):
 
             trade.stake_amount = trade.amount * trade.open_rate / trade.leverage
             self.update_trade_state(trade, trade.open_order_id, corder)
-
-            trade.open_order_id = next((orderLoc for orderLoc in trade.orders if orderLoc.status == 'open' and orderLoc.order_id != order.order_id), None)
+            logger.warning(f'Order data: {order}')
+            trade.open_order_id = next((orderLoc.order_id for orderLoc in trade.orders if orderLoc.status == 'open' and orderLoc.order_id != order['id']), None)            
+            logger.warning(f'Modified open order id to {trade.open_order_id}')
             logger.info(f'Partial {trade.entry_side} order timeout for {trade}.')
             reason += f", {constants.CANCEL_REASON['PARTIALLY_FILLED']}"
 
@@ -1721,8 +1726,10 @@ class FreqtradeBot(LoggingMixin):
             amount = trade.amount
         gain = "profit" if profit_ratio > 0 else "loss"
         
-        min_ratio = trade.calc_profit_ratio(trade.min_rate)
-        max_ratio = trade.calc_profit_ratio(trade.max_rate)    
+        #min_ratio = trade.calc_profit_ratio(trade.min_rate)
+        #max_ratio = trade.calc_profit_ratio(trade.max_rate)    
+        min_ratio = 0
+        max_ratio = 0
 
         if min_ratio is None:
             min_ratio = 0
