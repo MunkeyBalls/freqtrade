@@ -169,6 +169,9 @@ class Order(_DECL_BASE):
                 'order_type': self.order_type,
                 'price': self.price,
                 'remaining': self.remaining,
+                'trade_id': self.ft_trade_id,
+                'id': self.id,
+                'price': self.price,
             })
         return resp
 
@@ -211,12 +214,24 @@ class Order(_DECL_BASE):
         return o
 
     @staticmethod
-    def get_open_orders() -> List['Order']:
+    def get_open_orders(trade_filter=None) -> List['Order']:
         """
         Retrieve open orders from the database
+        :param trade_filter: Optional filter to apply to orders
+                             Can be either a Filter object, or a List of filters
+                             e.g. `(order_filter=[Order.id == order_id, Order.is_open.is_(True),])`
+                             e.g. `(order_filter=Order.id == order_id)`
         :return: List of open orders
         """
-        return Order.query.filter(Order.ft_is_open.is_(True)).all()
+        if trade_filter is not None:
+            if not isinstance(trade_filter, list):
+                trade_filter = [trade_filter]
+            trade_filter.append(Order.ft_is_open.is_(True))
+            this_query = Order.query.filter(*trade_filter)
+        else:
+            this_query = Order.query.filter(Order.ft_is_open.is_(True))
+
+        return this_query.all()
 
     @staticmethod
     def order_by_id(order_id: str) -> Optional['Order']:
@@ -419,7 +434,7 @@ class LocalTrade():
     def to_json(self, minified: bool = False) -> Dict[str, Any]:
         filled_orders = self.select_filled_or_open_orders()
         orders = [order.to_json(self.entry_side, minified) for order in filled_orders]
-
+        
         return {
             'trade_id': self.id,
             'pair': self.pair,

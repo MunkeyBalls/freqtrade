@@ -199,6 +199,7 @@ class Telegram(RPCHandler):
             CommandHandler('max_trades', self._max_trades),
             CommandHandler('reset_trade', self._reset_trade),
             CommandHandler('cancel_entries', self._cancel_open_entries),
+            CommandHandler('open_orders', self._get_open_orders),
         ]
         callbacks = [
             CallbackQueryHandler(self._status_table, pattern='update_status_table'),
@@ -491,14 +492,16 @@ class Telegram(RPCHandler):
         """
         Prepare details of trade with entry adjustment enabled
         """
+        #logger.warning(f"Filled order prepare: {filled_orders}")
+
         lines_detail: List[str] = []
         if len(filled_orders) > 0:
             first_avg = filled_orders[0]["safe_price"]
 
         for x, order in enumerate(filled_orders):
             lines: List[str] = []
-            if order['is_open'] is True:
-                continue
+            #if order['is_open'] is True:
+            #    continue
             wording = 'Entry' if order['ft_is_entry'] else 'Exit'
 
             cur_entry_datetime = arrow.get(order["order_filled_date"])
@@ -1152,6 +1155,7 @@ class Telegram(RPCHandler):
         except RPCException as e:
             self._send_msg(str(e))
 
+    # TODO: Cancel by 'all' or specific ORDER id, instead of trade.. Or maybe both? 
     @authorized_only
     def _cancel_open_entries(self, update: Update, context: CallbackContext) -> None:
         """
@@ -1165,10 +1169,44 @@ class Telegram(RPCHandler):
         if context.args:
             trade_id = context.args[0]
             try:
-                self._rpc._rpc_cancel_open_entries(trade_id)            
+                self._rpc._rpc_cancel_open_entries(trade_id=trade_id) # Temp using for listing entries
             except RPCException:
                 self._send_msg(msg='No open trade found.')
                 return
+
+    @authorized_only
+    def _get_open_orders(self, update: Update, context: CallbackContext) -> None:
+        """
+        Handler for /open_orders <id>.
+        Cancels open entries for specific trade
+        :param bot: telegram bot
+        :param update: message update
+        :return: None
+        """
+        if context.args:
+            trade_id = context.args[0]
+            try:
+                 #self._rpc._rpc_cancel_open_entries(trade_id) # Temp using for listing entries
+                orders = self._rpc._rpc_get_open_orders(tradeid=trade_id)
+                orders_tab = tabulate(
+                    [[f"{order['trade_id']}", 
+                    f"{order['id']}", 
+                    f"{order['pair']}",
+                    f"{order['ft_order_side']}",
+                    f"{order['price']}",
+                    ] for order in orders['orders']],
+                    headers=[
+                        'Trade',
+                        'Id',
+                        'Pair',
+                        'Side',
+                        'Price',
+                    ],
+                tablefmt='simple')
+                message = (f"<pre>{orders_tab}</pre>" if orders['orders_count'] > 0 else '')
+                self._send_msg(message, parse_mode=ParseMode.HTML)
+            except RPCException as e:
+                self._send_msg(str(e))
 
     @authorized_only
     def _force_exit(self, update: Update, context: CallbackContext) -> None:

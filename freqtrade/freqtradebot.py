@@ -1035,15 +1035,13 @@ class FreqtradeBot(LoggingMixin):
         """
         Cancel open entries for trade
         """        
-        fully_canceled = True        
-        logger.warning(f'Enter cancel open entry {trade.pair} open: {trade.open_order_id}')
-        if trade.open_order_id:
-            for order in trade.orders:
-                if order.ft_is_open and order.side == trade.entry_side:
-                    orderDict = self.exchange.fetch_order(order.order_id, trade.pair)                    
-                    fully_canceled = self.handle_cancel_enter(
-                        trade, orderDict, constants.CANCEL_REASON['FORCE_EXIT'])
-                    logger.warning(f'Cancelling open entry {trade.id} {trade.pair} {order.order_id} price={order.price} full_cancelled={fully_canceled}')
+        fully_canceled = True              
+        for order in trade.orders:
+            if order.ft_is_open and order.side == trade.entry_side:
+                orderDict = self.exchange.fetch_order(order.order_id, trade.pair)                  
+                fully_canceled = self.handle_cancel_enter(
+                    trade, orderDict, constants.CANCEL_REASON['FORCE_EXIT'])
+                logger.warning(f'Cancelled open entry {trade.id} {trade.pair} {order.order_id} price={order.price} full_cancelled={fully_canceled}')
         return fully_canceled
 
     def cancel_open_orders(self, trade: Trade) -> bool:

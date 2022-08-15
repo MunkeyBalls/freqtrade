@@ -544,6 +544,24 @@ class RPC:
             "total_trades": Trade.get_trades([Trade.is_open.is_(False)]).count(),
         }
 
+    def _rpc_get_open_orders(self, tradeid: str) -> Dict:
+        """ Returns open orders for trade"""
+        trade = Trade.get_trades(
+            trade_filter=[Trade.id == tradeid, Trade.is_open.is_(True), ]
+        ).first()
+        if not trade:
+            logger.warning('get_open_orders: Invalid argument received')
+            raise RPCException('invalid argument')
+ 
+        #logger.warn(f"Orders: {trade.orders}")
+        output = [order.to_json(trade.entry_side) for order in trade.orders if order.status == 'open'] # or check ft_is_open?
+        #logger.warn(f"OrderJSON {output}")
+
+        return {
+            "orders": output,
+            "orders_count": len(output),
+        }
+
     def _rpc_stats(self) -> Dict[str, Any]:
         """
         Generate generic stats for trades in database
