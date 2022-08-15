@@ -120,9 +120,10 @@ class Telegram(RPCHandler):
                                  r'/daily$', r'/daily \d+$', r'/profit$', r'/profit \d+',
                                  r'/stats$', r'/count$', r'/locks$', r'/balance$',
                                  r'/stopbuy$', r'/reload_config$', r'/show_config$',
-                                 r'/logs$', r'/whitelist$', r'/blacklist$', r'/bl_delete$',                                 
+                                 r'/logs$', r'/whitelist$', r'/whitelist(\ssorted|\sbaseonly)+$',
+                                 r'/blacklist$', r'/bl_delete$',
                                  r'/split$', r'/trail$', r'/hold$', r'/max_trades$',
-                                 r'/cancel_entries$', r'/list_entries$',
+                                 r'/cancel_entries$', r'/open_orders$',
                                  r'/weekly$', r'/weekly \d+$', r'/monthly$', r'/monthly \d+$',
                                  r'/forcebuy$', r'/forcelong$', r'/forceshort$',
                                  r'/forcesell$', r'/forceexit$',
@@ -1614,6 +1615,12 @@ class Telegram(RPCHandler):
         try:
             whitelist = self._rpc._rpc_whitelist()
 
+            if context.args:
+                if "sorted" in context.args:
+                    whitelist['whitelist'] = sorted(whitelist['whitelist'])
+                if "baseonly" in context.args:
+                    whitelist['whitelist'] = [pair.split("/")[0] for pair in whitelist['whitelist']]
+
             message = f"Using whitelist `{whitelist['method']}` with {whitelist['length']} pairs\n"
             message += f"`{', '.join(whitelist['whitelist'])}`"
 
@@ -1733,7 +1740,8 @@ class Telegram(RPCHandler):
             "*/fx <trade_id>|all:* `Alias to /forceexit`\n"
             f"{force_enter_text if self._config.get('force_entry_enable', False) else ''}"
             "*/delete <trade_id>:* `Instantly delete the given trade in the database`\n"
-            "*/whitelist:* `Show current whitelist` \n"
+            "*/whitelist [sorted] [baseonly]:* `Show current whitelist. Optionally in "
+            "order and/or only displaying the base currency of each pairing.`\n"
             "*/blacklist [pair]:* `Show current blacklist, or adds one or more pairs "
             "to the blacklist.` \n"
             "*/blacklist_delete [pairs]| /bl_delete [pairs]:* "
@@ -1770,7 +1778,7 @@ class Telegram(RPCHandler):
             "*/weekly <n>:* `Shows statistics per week, over the last n weeks`\n"
             "*/monthly <n>:* `Shows statistics per month, over the last n months`\n"
             "*/stats:* `Shows Wins / losses by Sell reason as well as "
-            "Avg. holding durationsfor buys and sells.`\n"
+            "Avg. holding durations for buys and sells.`\n"
             "*/help:* `This help message`\n"
             "*/version:* `Show version`\n"
 
