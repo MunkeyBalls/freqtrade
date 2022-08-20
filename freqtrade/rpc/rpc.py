@@ -904,7 +904,7 @@ class RPC:
         return {'result': f'Cancelled open entries for trade {trade_id}.'}
 
     def __exec_force_exit(self, trade: Trade, ordertype: Optional[str],
-                          amount: Optional[float] = None) -> None:
+                          amount: Optional[float] = None, price: Optional[float] = None) -> None:
         # Check if there is there is an open order
         fully_canceled = False
         if trade.open_order_id:
@@ -919,9 +919,11 @@ class RPC:
                 self._freqtrade.handle_cancel_exit(trade, order, CANCEL_REASON['FORCE_EXIT'])
 
         if not fully_canceled:
-            # Get current rate and execute sell
+            # Get current rate and execute sell   
             current_rate = self._freqtrade.exchange.get_rate(
                 trade.pair, side='exit', is_short=trade.is_short, refresh=True)
+            if price is None:
+                price = current_rate    
             exit_check = ExitCheckTuple(exit_type=ExitType.FORCE_EXIT)
             order_type = ordertype or self._freqtrade.strategy.order_types.get(
                 "force_exit", self._freqtrade.strategy.order_types["exit"])
@@ -929,18 +931,18 @@ class RPC:
             if amount and amount < trade.amount:
                 # Partial exit ...
                 min_exit_stake = self._freqtrade.exchange.get_min_pair_stake_amount(
-                    trade.pair, current_rate, trade.stop_loss_pct)
-                remaining = (trade.amount - amount) * current_rate
+                    trade.pair, price, trade.stop_loss_pct)
+                remaining = (trade.amount - amount) * price
                 if remaining < min_exit_stake:
                     raise RPCException(f'Remaining amount of {remaining} would be too small.')
                 sub_amount = amount
 
             self._freqtrade.execute_trade_exit(
-                trade, current_rate, exit_check, ordertype=order_type,
+                trade, price, exit_check, ordertype=order_type,
                 sub_trade_amt=sub_amount)
 
     def _rpc_force_exit(self, trade_id: str, ordertype: Optional[str] = None, *,
-                        amount: Optional[float] = None) -> Dict[str, str]:
+                        amount: Optional[float] = None, price: Optional[float]) -> Dict[str, str]:
         """
         Handler for forceexit <id>.
         Sells the given trade at current price
@@ -953,6 +955,7 @@ class RPC:
             if trade_id == 'all':
                 # Execute sell for all open orders
                 for trade in Trade.get_open_trades():
+                    # TODO: Check if price is entered and return error?
                     self.__exec_force_exit(trade, ordertype)
                 Trade.commit()
                 self._freqtrade.wallets.update()
@@ -966,7 +969,7 @@ class RPC:
                 logger.warning('force_exit: Invalid argument received')
                 raise RPCException('invalid argument')
 
-            self.__exec_force_exit(trade, ordertype, amount)
+            self.__exec_force_exit(trade, ordertype, amount, price=price)
             Trade.commit()
             self._freqtrade.wallets.update()
             return {'result': f'Created sell order for trade {trade_id}.'}

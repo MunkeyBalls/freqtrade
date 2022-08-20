@@ -1221,7 +1221,8 @@ class Telegram(RPCHandler):
 
         if context.args:
             trade_id = context.args[0]
-            self._force_exit_action(trade_id)
+            price = context.args[1] if len(context.args) == 2 else None
+            self._force_exit_action(trade_id, price=price)
         else:
             fiat_currency = self._config.get('fiat_display_currency', '')
             try:
@@ -1243,10 +1244,10 @@ class Telegram(RPCHandler):
                 text='Cancel', callback_data='force_exit__cancel')])
             self._send_msg(msg="Which trade?", keyboard=buttons_aligned)
 
-    def _force_exit_action(self, trade_id):
+    def _force_exit_action(self, trade_id, price: Optional[float]):
         if trade_id != 'cancel':
             try:
-                self._rpc._rpc_force_exit(trade_id)
+                self._rpc._rpc_force_exit(trade_id, price=price)
             except RPCException as e:
                 self._send_msg(str(e))
 
