@@ -318,15 +318,12 @@ CONF_SCHEMA = {
                             'enum': TELEGRAM_SETTING_OPTIONS,
                             'default': 'on'
                         },
-<<<<<<< HEAD
                         'exit_hold': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
                             'default': 'off'
                         },
-=======
                         'exit_cancel': {'type': 'string', 'enum': TELEGRAM_SETTING_OPTIONS},
->>>>>>> d9c8e7157bb30b801060aa367f35a422345b11cc
                         'protection_trigger': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
