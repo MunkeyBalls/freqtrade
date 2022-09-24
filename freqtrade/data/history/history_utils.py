@@ -228,9 +228,9 @@ def _download_pair_history(pair: str, *,
                     )
 
         logger.debug("Current Start: %s",
-                     f"{data.iloc[0]['date']:%Y-%m-%d %H:%M:%S}" if not data.empty else 'None')
+                     f"{data.iloc[0]['date']:DATETIME_PRINT_FORMAT}" if not data.empty else 'None')
         logger.debug("Current End: %s",
-                     f"{data.iloc[-1]['date']:%Y-%m-%d %H:%M:%S}" if not data.empty else 'None')
+                     f"{data.iloc[-1]['date']:DATETIME_PRINT_FORMAT}" if not data.empty else 'None')
 
         # Default since_ms to 30 days if nothing is given
         new_data = exchange.get_historic_ohlcv(pair=pair,
@@ -254,9 +254,9 @@ def _download_pair_history(pair: str, *,
                                          fill_missing=False, drop_incomplete=False)
 
         logger.debug("New  Start: %s",
-                     f"{data.iloc[0]['date']:%Y-%m-%d %H:%M:%S}" if not data.empty else 'None')
+                     f"{data.iloc[0]['date']:DATETIME_PRINT_FORMAT}" if not data.empty else 'None')
         logger.debug("New End: %s",
-                     f"{data.iloc[-1]['date']:%Y-%m-%d %H:%M:%S}" if not data.empty else 'None')
+                     f"{data.iloc[-1]['date']:DATETIME_PRINT_FORMAT}" if not data.empty else 'None')
 
         data_handler.ohlcv_store(pair, timeframe, data=data, candle_type=candle_type)
         return True
@@ -302,8 +302,8 @@ def refresh_backtest_ohlcv_data(exchange: Exchange, pairs: List[str], timeframes
         if trading_mode == 'futures':
             # Predefined candletype (and timeframe) depending on exchange
             # Downloads what is necessary to backtest based on futures data.
-            tf_mark = exchange._ft_has['mark_ohlcv_timeframe']
-            fr_candle_type = CandleType.from_string(exchange._ft_has['mark_ohlcv_price'])
+            tf_mark = exchange.get_option('mark_ohlcv_timeframe')
+            fr_candle_type = CandleType.from_string(exchange.get_option('mark_ohlcv_price'))
             # All exchanges need FundingRate for futures trading.
             # The timeframe is aligned to the mark-price timeframe.
             for funding_candle_type in (CandleType.FUNDING_RATE, fr_candle_type):
@@ -330,13 +330,12 @@ def _download_trades_history(exchange: Exchange,
     try:
 
         until = None
+        since = 0
         if timerange:
             if timerange.starttype == 'date':
                 since = timerange.startts * 1000
             if timerange.stoptype == 'date':
                 until = timerange.stopts * 1000
-        else:
-            since = arrow.utcnow().shift(days=-new_pairs_days).int_timestamp * 1000
 
         trades = data_handler.trades_load(pair)
 
@@ -348,6 +347,9 @@ def _download_trades_history(exchange: Exchange,
             # since is before the first trade
             logger.info(f"Start earlier than available data. Redownloading trades for {pair}...")
             trades = []
+
+        if not since:
+            since = arrow.utcnow().shift(days=-new_pairs_days).int_timestamp * 1000
 
         from_id = trades[-1][1] if trades else None
         if trades and since < trades[-1][0]:

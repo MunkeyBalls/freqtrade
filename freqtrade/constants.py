@@ -3,7 +3,7 @@
 """
 bot constants
 """
-from typing import List, Literal, Tuple
+from typing import Any, Dict, List, Literal, Tuple
 
 from freqtrade.enums import CandleType
 
@@ -23,7 +23,8 @@ REQUIRED_ORDERTIF = ['entry', 'exit']
 REQUIRED_ORDERTYPES = ['entry', 'exit', 'stoploss', 'stoploss_on_exchange']
 PRICING_SIDES = ['ask', 'bid', 'same', 'other']
 ORDERTYPE_POSSIBILITIES = ['limit', 'market']
-ORDERTIF_POSSIBILITIES = ['gtc', 'fok', 'ioc']
+_ORDERTIF_POSSIBILITIES = ['GTC', 'FOK', 'IOC', 'PO']
+ORDERTIF_POSSIBILITIES = _ORDERTIF_POSSIBILITIES + [t.lower() for t in _ORDERTIF_POSSIBILITIES]
 HYPEROPT_LOSS_BUILTIN = ['ShortTradeDurHyperOptLoss', 'OnlyProfitHyperOptLoss',
                          'SharpeHyperOptLoss', 'SharpeHyperOptLossDaily',
                          'SortinoHyperOptLoss', 'SortinoHyperOptLossDaily',
@@ -246,6 +247,7 @@ CONF_SCHEMA = {
         'exchange': {'$ref': '#/definitions/exchange'},
         'edge': {'$ref': '#/definitions/edge'},
         'freqai': {'$ref': '#/definitions/freqai'},
+        'external_message_consumer': {'$ref': '#/definitions/external_message_consumer'},
         'experimental': {
             'type': 'object',
             'properties': {
@@ -292,16 +294,18 @@ CONF_SCHEMA = {
                         'warning': {'type': 'string', 'enum': TELEGRAM_SETTING_OPTIONS},
                         'startup': {'type': 'string', 'enum': TELEGRAM_SETTING_OPTIONS},
                         'entry': {'type': 'string', 'enum': TELEGRAM_SETTING_OPTIONS},
-                        'entry_cancel': {'type': 'string', 'enum': TELEGRAM_SETTING_OPTIONS},
+
+                        'entry_fill': {
+                            'type': 'string',
+                            'enum': TELEGRAM_SETTING_OPTIONS,
+                            'default': 'off'
+                        },
+                        'entry_cancel': {'type': 'string', 'enum': TELEGRAM_SETTING_OPTIONS, },
                         'entry_cancel_strategy': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
                             'default': 'off'
                         },
-                        'entry_fill': {'type': 'string',
-                                       'enum': TELEGRAM_SETTING_OPTIONS,
-                                       'default': 'off'
-                                       },
                         'exit': {
                             'type': ['string', 'object'],
                             'additionalProperties': {
@@ -309,17 +313,20 @@ CONF_SCHEMA = {
                                 'enum': TELEGRAM_SETTING_OPTIONS
                             }
                         },
-                        'exit_cancel': {'type': 'string', 'enum': TELEGRAM_SETTING_OPTIONS},
                         'exit_fill': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
                             'default': 'on'
                         },
+<<<<<<< HEAD
                         'exit_hold': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
                             'default': 'off'
                         },
+=======
+                        'exit_cancel': {'type': 'string', 'enum': TELEGRAM_SETTING_OPTIONS},
+>>>>>>> d9c8e7157bb30b801060aa367f35a422345b11cc
                         'protection_trigger': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
@@ -328,14 +335,17 @@ CONF_SCHEMA = {
                         'protection_trigger_global': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
+                            'default': 'on'
                         },
                         'show_candle': {
                             'type': 'string',
                             'enum': ['off', 'ohlc'],
+                            'default': 'off'
                         },
                         'strategy_msg': {
                             'type': 'string',
                             'enum': TELEGRAM_SETTING_OPTIONS,
+                            'default': 'on'
                         },
                     }
                 },
@@ -477,6 +487,7 @@ CONF_SCHEMA = {
                 },
                 'username': {'type': 'string'},
                 'password': {'type': 'string'},
+                'ws_token': {'type': ['string', 'array'], 'items': {'type': 'string'}},
                 'jwt_secret_key': {'type': 'string'},
                 'CORS_origins': {'type': 'array', 'items': {'type': 'string'}},
                 'verbosity': {'type': 'string', 'enum': ['error', 'info']},
@@ -561,6 +572,47 @@ CONF_SCHEMA = {
             },
             'required': ['process_throttle_secs', 'allowed_risk']
         },
+        'external_message_consumer': {
+            'type': 'object',
+            'properties': {
+                'enabled': {'type': 'boolean', 'default': False},
+                'producers': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'name': {'type': 'string'},
+                            'host': {'type': 'string'},
+                            'port': {
+                                'type': 'integer',
+                                'default': 8080,
+                                'minimum': 0,
+                                'maximum': 65535
+                            },
+                            'ws_token': {'type': 'string'},
+                        },
+                        'required': ['name', 'host', 'ws_token']
+                    }
+                },
+                'wait_timeout': {'type': 'integer', 'minimum': 0},
+                'sleep_time': {'type': 'integer', 'minimum': 0},
+                'ping_timeout': {'type': 'integer', 'minimum': 0},
+                'remove_entry_exit_signals': {'type': 'boolean', 'default': False},
+                'initial_candle_limit': {
+                    'type': 'integer',
+                    'minimum': 0,
+                    'maximum': 1500,
+                    'default': 1500
+                },
+                'message_size_limit': {  # In megabytes
+                    'type': 'integer',
+                    'minimum': 1,
+                    'maxmium': 20,
+                    'default': 8,
+                }
+            },
+            'required': ['producers']
+        },
         "freqai": {
             "type": "object",
             "properties": {
@@ -581,6 +633,7 @@ CONF_SCHEMA = {
                         "weight_factor": {"type": "number", "default": 0},
                         "principal_component_analysis": {"type": "boolean", "default": False},
                         "use_SVM_to_remove_outliers": {"type": "boolean", "default": False},
+                        "plot_feature_importance": {"type": "boolean", "default": False},
                         "svm_params": {"type": "object",
                                        "properties": {
                                            "shuffle": {"type": "boolean", "default": False},
@@ -680,3 +733,5 @@ LongShort = Literal['long', 'short']
 EntryExit = Literal['entry', 'exit']
 BuySell = Literal['buy', 'sell']
 MakerTaker = Literal['maker', 'taker']
+
+Config = Dict[str, Any]

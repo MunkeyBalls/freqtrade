@@ -7,7 +7,8 @@ from typing import Any, Dict, List, Union
 from pandas import DataFrame, to_datetime
 from tabulate import tabulate
 
-from freqtrade.constants import DATETIME_PRINT_FORMAT, LAST_BT_RESULT_FN, UNLIMITED_STAKE_AMOUNT
+from freqtrade.constants import (DATETIME_PRINT_FORMAT, LAST_BT_RESULT_FN, UNLIMITED_STAKE_AMOUNT,
+                                 Config)
 from freqtrade.data.metrics import (calculate_cagr, calculate_csum, calculate_market_change,
                                     calculate_max_drawdown)
 from freqtrade.misc import decimals_per_coin, file_dump_joblib, file_dump_json, round_coin_value
@@ -75,7 +76,8 @@ def _get_line_floatfmt(stake_currency: str) -> List[str]:
             '.2f', 'd', 's', 's']
 
 
-def _get_line_header(first_column: str, stake_currency: str, direction: str = 'Buys') -> List[str]:
+def _get_line_header(first_column: str, stake_currency: str,
+                     direction: str = 'Entries') -> List[str]:
     """
     Generate header lines (goes in line with _generate_result_line())
     """
@@ -642,7 +644,7 @@ def text_table_tags(tag_type: str, tag_results: List[Dict[str, Any]], stake_curr
     if (tag_type == "enter_tag"):
         headers = _get_line_header("TAG", stake_currency)
     else:
-        headers = _get_line_header("TAG", stake_currency, 'Sells')
+        headers = _get_line_header("TAG", stake_currency, 'Exits')
     floatfmt = _get_line_floatfmt(stake_currency)
     output = [
         [
@@ -897,7 +899,7 @@ def show_backtest_result(strategy: str, results: Dict[str, Any], stake_currency:
     print()
 
 
-def show_backtest_results(config: Dict, backtest_stats: Dict):
+def show_backtest_results(config: Config, backtest_stats: Dict):
     stake_currency = config['stake_currency']
 
     for strategy, results in backtest_stats['strategy'].items():
@@ -917,7 +919,7 @@ def show_backtest_results(config: Dict, backtest_stats: Dict):
         print('\nFor more details, please look at the detail tables above')
 
 
-def show_sorted_pairlist(config: Dict, backtest_stats: Dict):
+def show_sorted_pairlist(config: Config, backtest_stats: Dict):
     if config.get('backtest_show_pair_list', False):
         for strategy, results in backtest_stats['strategy'].items():
             print(f"Pairs for Strategy {strategy}: \n[")

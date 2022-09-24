@@ -11,8 +11,7 @@ from freqtrade.data.history import (convert_trades_to_ohlcv, refresh_backtest_oh
                                     refresh_backtest_trades_data)
 from freqtrade.enums import CandleType, RunMode, TradingMode
 from freqtrade.exceptions import OperationalException
-from freqtrade.exchange import timeframe_to_minutes
-from freqtrade.exchange.exchange import market_is_active
+from freqtrade.exchange import market_is_active, timeframe_to_minutes
 from freqtrade.plugins.pairlist.pairlist_helpers import dynamic_expand_pairlist, expand_pairlist
 from freqtrade.resolvers import ExchangeResolver
 
@@ -81,7 +80,7 @@ def start_download_data(args: Dict[str, Any]) -> None:
                 data_format_trades=config['dataformat_trades'],
             )
         else:
-            if not exchange._ft_has.get('ohlcv_has_history', True):
+            if not exchange.get_option('ohlcv_has_history', True):
                 raise OperationalException(
                     f"Historic klines not available for {exchange.name}. "
                     "Please use `--dl-trades` instead for this exchange "

@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Type, Union
 
+from freqtrade.constants import Config
 from freqtrade.exceptions import OperationalException
 
 
@@ -43,7 +44,7 @@ class IResolver:
     initial_search_path: Optional[Path]
 
     @classmethod
-    def build_search_paths(cls, config: Dict[str, Any], user_subdir: Optional[str] = None,
+    def build_search_paths(cls, config: Config, user_subdir: Optional[str] = None,
                            extra_dirs: List[str] = []) -> List[Path]:
 
         abs_paths: List[Path] = []
@@ -153,7 +154,7 @@ class IResolver:
         return None
 
     @classmethod
-    def load_object(cls, object_name: str, config: dict, *, kwargs: dict,
+    def load_object(cls, object_name: str, config: Config, *, kwargs: dict,
                     extra_dir: Optional[str] = None) -> Any:
         """
         Search and loads the specified object as configured in hte child class.
@@ -193,7 +194,10 @@ class IResolver:
         :return: List of dicts containing 'name', 'class' and 'location' entries
         """
         logger.debug(f"Searching for {cls.object_type.__name__} '{directory}'")
-        objects = []
+        objects: List[Dict[str, Any]] = []
+        if not directory.is_dir():
+            logger.info(f"'{directory}' is not a directory, skipping.")
+            return objects
         for entry in directory.iterdir():
             if (
                 recursive and entry.is_dir()
