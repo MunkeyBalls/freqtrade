@@ -946,7 +946,7 @@ class RPC:
                 sub_trade_amt=sub_amount)
 
     def _rpc_force_exit(self, trade_id: str, ordertype: Optional[str] = None, *,
-                        amount: Optional[float] = None, price: Optional[float]) -> Dict[str, str]:
+                        amount: Optional[float] = None, price: Optional[float]  = None) -> Dict[str, str]:
         """
         Handler for forceexit <id>.
         Sells the given trade at current price

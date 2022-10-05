@@ -1227,7 +1227,7 @@ class Telegram(RPCHandler):
             trade_id = context.args[0]
             try:
                 price = float(context.args[1]) if len(context.args) == 2 else None
-                self._force_exit_action(trade_id, price=price)        
+                self._force_exit_action(trade_id, price=price)
             except ValueError:
                 self.send_msg(msg=f'Requested price {context.args[1]} is not a float.')
             
@@ -1252,7 +1252,7 @@ class Telegram(RPCHandler):
                 text='Cancel', callback_data='force_exit__cancel')])
             self._send_msg(msg="Which trade?", keyboard=buttons_aligned)
 
-    def _force_exit_action(self, trade_id, price: Optional[float]):
+    def _force_exit_action(self, trade_id, price: Optional[float] = None):
         if trade_id != 'cancel':
             try:
                 self._rpc._rpc_force_exit(trade_id, price=price)
