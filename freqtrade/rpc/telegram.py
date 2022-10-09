@@ -505,8 +505,8 @@ class Telegram(RPCHandler):
 
         for x, order in enumerate(filled_orders):
             lines: List[str] = []
-            #if order['is_open'] is True:
-            #    continue
+            if order['is_open'] is True:
+                continue
             wording = 'Entry' if order['ft_is_entry'] else 'Exit'
 
             cur_entry_datetime = arrow.get(order["order_filled_date"])

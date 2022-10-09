@@ -1489,7 +1489,7 @@ class FreqtradeBot(LoggingMixin):
             else:
                 self.update_trade_state(trade, trade.open_order_id, corder)
                 logger.warning(f'Order data: {order}')
-                trade.open_order_id = next((orderLoc.order_id for orderLoc in trade.orders if orderLoc.status == 'open' and orderLoc.order_id != order['id']), None)
+                trade.open_order_id = next((orderLoc.order_id for orderLoc in trade.orders.sort(key=lambda x: x.get('price')) if orderLoc.status == 'open' and orderLoc.order_id != order['id']), None)
                 logger.warning(f'Modified open order id to {trade.open_order_id}')
                 
                 logger.info(f'{side} Order timeout for {trade}.')
@@ -1498,7 +1498,7 @@ class FreqtradeBot(LoggingMixin):
             # to the trade object
             self.update_trade_state(trade, trade.open_order_id, corder)
             logger.warning(f'Order data: {order}')
-            trade.open_order_id = next((orderLoc.order_id for orderLoc in trade.orders if orderLoc.status == 'open' and orderLoc.order_id != order['id']), None)            
+            trade.open_order_id = next((orderLoc.order_id for orderLoc in trade.orders.sort(key=lambda x: x.get('price')) if orderLoc.status == 'open' and orderLoc.order_id != order['id']), None)            
             logger.warning(f'Modified open order id to {trade.open_order_id}')
             logger.info(f'Partial {trade.entry_side} order timeout for {trade}.')
             reason += f", {constants.CANCEL_REASON['PARTIALLY_FILLED']}"
