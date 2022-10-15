@@ -202,6 +202,7 @@ class RPC:
                 stoploss_current_dist = trade.stop_loss - current_rate
                 stoploss_current_dist_ratio = stoploss_current_dist / current_rate
 
+                logger.warning(f'Status open order: {order}')
                 trade_dict = trade.to_json()
                 trade_dict.update(dict(
                     close_profit=trade.close_profit if not trade.is_open else None,

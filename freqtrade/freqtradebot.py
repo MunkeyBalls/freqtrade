@@ -1327,22 +1327,46 @@ class FreqtradeBot(LoggingMixin):
             try:
                 if not trade.open_order_id:
                     continue
-                order = self.exchange.fetch_order(trade.open_order_id, trade.pair)
+
+                orders = []                
+                open_orders = [x for x in trade.orders if x.status == 'open']
+                #logger.warning(f'Manage open orders: {open_orders}')
+                if open_orders:
+                    sorted_orders = sorted(open_orders, key=lambda x: (x.side, -x.price), reverse=False)
+                    #logger.warning(f'Sorted entries: {sorted_orders}')
+                
+                    open_entry = sorted_orders[0].order_id if sorted_orders[0].side == trade.entry_side else None
+                    open_exit = sorted_orders[-1].order_id if sorted_orders[-1].side == trade.exit_side else None                    
+                    #logger.warning(f'First entry: {open_entry}')
+                    #logger.warning(f'Last (exit) entries: {open_exit}')                
+                          
+                    if open_entry:
+                        exchange_order = self.exchange.fetch_order(open_entry, trade.pair)
+                        exchange_order['order_id'] = open_entry
+                        orders.append(exchange_order)
+
+                    if open_exit:
+                        exchange_order = self.exchange.fetch_order(open_exit, trade.pair)
+                        exchange_order['order_id'] = open_exit
+                        orders.append(exchange_order)
+
             except (ExchangeError):
                 logger.info('Cannot query order for %s due to %s', trade, traceback.format_exc())
                 continue
+                
+            for order in orders: 
+                #logger.warning(f'Checking entry: {order}')      
+                fully_cancelled = self.update_trade_state(trade, order['id'], order)
+                not_closed = order['status'] == 'open' or fully_cancelled
+                order_obj = trade.select_order_by_order_id(order['order_id'])
+                hold_entry = trade.hold_pct != 0 and (order['side'] == trade.entry_side or (order['side'] == trade.exit_side and trade.exit_reason == 'force_exit'))
 
-            fully_cancelled = self.update_trade_state(trade, trade.open_order_id, order)
-            not_closed = order['status'] == 'open' or fully_cancelled
-            order_obj = trade.select_order_by_order_id(trade.open_order_id)
-            hold_entry = trade.hold_pct != 0 and (order['side'] == trade.entry_side or (order['side'] == trade.exit_side and trade.exit_reason == 'force_exit'))
-              
-            if not_closed and not hold_entry:
-                if fully_cancelled or (order_obj and self.strategy.ft_check_timed_out(
-                   trade, order_obj, datetime.now(timezone.utc))):
-                    self.handle_timedout_order(order, trade)
-                else:
-                    self.replace_order(order, order_obj, trade)
+                if not_closed and not hold_entry:
+                    if fully_cancelled or (order_obj and self.strategy.ft_check_timed_out(
+                    trade, order_obj, datetime.now(timezone.utc))):
+                        self.handle_timedout_order(order, trade)
+                    else:
+                        self.replace_order(order, order_obj, trade)
 
     def handle_timedout_order(self, order: Dict, trade: Trade) -> None:
         """
@@ -1449,6 +1473,8 @@ class FreqtradeBot(LoggingMixin):
         was_trade_fully_canceled = False
         side = trade.entry_side.capitalize()
 
+        #logger.warning(f"Cancel order dict: {order}")
+
         # Cancelled orders may have the status of 'canceled' or 'closed'
         if order['status'] not in constants.NON_OPEN_EXCHANGE_STATES:
             filled_val: float = order.get('filled', 0.0) or 0.0
@@ -1467,7 +1493,7 @@ class FreqtradeBot(LoggingMixin):
             # Simply bailing here is the only safe way - as this order will then be
             # handled in the next iteration.
             if corder.get('status') not in constants.NON_OPEN_EXCHANGE_STATES:
-                logger.warning(f"Order {trade.open_order_id} for {trade.pair} not cancelled.")
+                logger.warning(f"Order {trade.open_order_id} for {trade.pair} not cancelled.") # Why is it using open_order_id instead of id on order?
                 return False
         else:
             # Order was cancelled already, so we can reuse the existing dict
@@ -1487,9 +1513,10 @@ class FreqtradeBot(LoggingMixin):
                 was_trade_fully_canceled = True
                 reason += f", {constants.CANCEL_REASON['FULLY_CANCELLED']}"
             else:
-                self.update_trade_state(trade, trade.open_order_id, corder)
-                logger.warning(f'Order data: {order}')
-                trade.open_order_id = next((orderLoc.order_id for orderLoc in trade.orders.sort(key=lambda x: x.get('price')) if orderLoc.status == 'open' and orderLoc.order_id != order['id']), None)
+                self.update_trade_state(trade, trade.open_order_id, corder) # Why is it using open_order_id instead of id on order?
+                #logger.warning(f'Order data: {trade.orders}')
+                sorted_orders = sorted(trade.orders, key=lambda x: x.price, reverse=True)
+                trade.open_order_id = next((orderLoc.order_id for orderLoc in sorted_orders if orderLoc.status == 'open' and orderLoc.order_id != order['id']), None)
                 logger.warning(f'Modified open order id to {trade.open_order_id}')
                 
                 logger.info(f'{side} Order timeout for {trade}.')
@@ -1497,8 +1524,9 @@ class FreqtradeBot(LoggingMixin):
             # update_trade_state (and subsequently recalc_trade_from_orders) will handle updates
             # to the trade object
             self.update_trade_state(trade, trade.open_order_id, corder)
-            logger.warning(f'Order data: {order}')
-            trade.open_order_id = next((orderLoc.order_id for orderLoc in trade.orders.sort(key=lambda x: x.get('price')) if orderLoc.status == 'open' and orderLoc.order_id != order['id']), None)            
+            #logger.warning(f'Order data: {trade.orders}')          
+            sorted_orders = sorted(trade.orders, key=lambda x: x.price, reverse=True) 
+            trade.open_order_id = next((orderLoc.order_id for orderLoc in sorted_orders if orderLoc.status == 'open' and orderLoc.order_id != order['id']), None)
             logger.warning(f'Modified open order id to {trade.open_order_id}')
             logger.info(f'Partial {trade.entry_side} order timeout for {trade}.')
             reason += f", {constants.CANCEL_REASON['PARTIALLY_FILLED']}"
