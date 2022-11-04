@@ -1072,27 +1072,30 @@ class IStrategy(ABC, HyperStrategyMixin):
                        trade.stop_loss > (high or current_rate)
                        )
 
+        # Make sure current_profit is calculated using high for backtesting.
+        bound = (low if trade.is_short else high)
+        bound_profit = current_profit if not bound else trade.calc_profit_ratio(bound)
         if self.use_custom_stoploss and dir_correct:
             stop_loss_value = strategy_safe_wrapper(self.custom_stoploss, default_retval=None
                                                     )(pair=trade.pair, trade=trade,
                                                       current_time=current_time,
-                                                      current_rate=current_rate,
-                                                      current_profit=current_profit)
+                                                      current_rate=(bound or current_rate),
+                                                      current_profit=bound_profit)
             # Sanity check - error cases will return None
             if stop_loss_value:
-                # logger.info(f"{trade.pair} {current_rate} {stop_loss_value=} {current_profit=} {trade.trail_pct}")
-                trade.adjust_stop_loss(current_rate, stop_loss_value)
+                # logger.info(f"{trade.pair} {stop_loss_value=} {bound_profit=}")
+                trade.adjust_stop_loss(bound or current_rate, stop_loss_value)
             else:
                 logger.warning("CustomStoploss function did not return valid stoploss")
 
         if trade.trail_pct is not None and trade.trail_pct != 0.0: 
-            if (current_profit >= trade.trail_pct
+            if (bound_profit >= trade.trail_pct
                 and trade.min_rate != 0.0 and trade.max_rate != 0.0): # Avoid trailing if some kind of fluke occured in the min/max rates
                 stop_loss_value = self.config.get('trade_trailing_pct', 0.005) * -1 # TODO: Method for linear stoploss, only if >
-                logger.info(f"Trailing: {trade.pair} {stop_loss_value=} {current_profit=} trail_pct={trade.trail_pct}") 
+                logger.info(f"Trailing: {trade.pair} {stop_loss_value=} {bound_profit=} trail_pct={trade.trail_pct}") 
                 # Sanity check - error cases will return None
                 if stop_loss_value:
-                    trade.adjust_stop_loss(current_rate, stop_loss_value)
+                    trade.adjust_stop_loss(bound or current_rate, stop_loss_value)
                 else:
                     logger.warning("Trail percentage function did not return valid stoploss")
                     
@@ -1101,10 +1104,7 @@ class IStrategy(ABC, HyperStrategyMixin):
         if self.trailing_stop and (sl_lower_long or sl_higher_short):
             # trailing stoploss handling
             sl_offset = self.trailing_stop_positive_offset
-
             # Make sure current_profit is calculated using high for backtesting.
-            bound = low if trade.is_short else high
-            bound_profit = current_profit if not bound else trade.calc_profit_ratio(bound)
 
             # Don't update stoploss if trailing_only_offset_is_reached is true.
             if not (self.trailing_only_offset_is_reached and bound_profit < sl_offset):
@@ -1112,7 +1112,7 @@ class IStrategy(ABC, HyperStrategyMixin):
                 if self.trailing_stop_positive is not None and bound_profit > sl_offset:
                     stop_loss_value = self.trailing_stop_positive
                     logger.debug(f"{trade.pair} - Using positive stoploss: {stop_loss_value} "
-                                 f"offset: {sl_offset:.4g} profit: {current_profit:.2%}")
+                                 f"offset: {sl_offset:.4g} profit: {bound_profit:.2%}")
 
                 trade.adjust_stop_loss(bound or current_rate, stop_loss_value)
 
