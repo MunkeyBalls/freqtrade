@@ -202,7 +202,9 @@ class RPC:
                 stoploss_current_dist = trade.stop_loss - current_rate
                 stoploss_current_dist_ratio = stoploss_current_dist / current_rate
 
-                logger.warning(f'Status open order: {order}')
+                remaining = order.remaining if order and order.remaining else 0
+
+                #logger.warning(f'Status open order: {order}')
                 trade_dict = trade.to_json()
                 trade_dict.update(dict(
                     close_profit=trade.close_profit if not trade.is_open else None,
@@ -221,7 +223,7 @@ class RPC:
                     stoploss_entry_dist=stoploss_entry_dist,
                     stoploss_entry_dist_ratio=round(stoploss_entry_dist_ratio, 8),
                     open_order='({} {} rem={:.8f})'.format(
-                        order.order_type, order.side, order.remaining
+                        order.order_type, order.side, remaining
                     ) if order else None,
                 ))
                 results.append(trade_dict)
@@ -1013,7 +1015,7 @@ class RPC:
             if not self._freqtrade.strategy.position_adjustment_enable:
                 raise RPCException(f'position for {pair} already open - id: {trade.id}')
         else:
-            if Trade.get_open_trade_count() >= self._config['max_open_trades']:
+            if enter_tag != 'force_entry' and Trade.get_open_trade_count() >= self._config['max_open_trades']:
                 raise RPCException("Maximum number of trades is reached.")
 
         # gen stake amount

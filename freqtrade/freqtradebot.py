@@ -692,7 +692,7 @@ class FreqtradeBot(LoggingMixin):
                f"{name} signal found: about create a new trade for {pair} with stake_amount: "
                f"{stake_amount} ...")
         logger.info(msg)
-        if enter_tag == 'forceentry':
+        if enter_tag == 'force_entry':
             hold_pct = self.config.get('forcebuy_hold_pct', 0.0)
         else:
             hold_pct = 0.0
@@ -1329,8 +1329,8 @@ class FreqtradeBot(LoggingMixin):
                     continue
 
                 orders = []                
-                open_orders = [x for x in trade.orders if x.status == 'open']
-                #logger.warning(f'Manage open orders: {open_orders}')
+                open_orders = [x for x in trade.orders if x.status == 'open' or x.status == None]
+                #logger.warning(f'Manage open tradeid: {trade.open_order_id} orders: {trade.orders}')
                 if open_orders:
                     sorted_orders = sorted(open_orders, key=lambda x: (x.side, -x.price), reverse=False)
                     #logger.warning(f'Sorted entries: {sorted_orders}')
@@ -1355,7 +1355,7 @@ class FreqtradeBot(LoggingMixin):
                 continue
                 
             for order in orders: 
-                #logger.warning(f'Checking entry: {order}')      
+                #logger.warning(f'Checking open order: {order}')      
                 fully_cancelled = self.update_trade_state(trade, order['id'], order)
                 not_closed = order['status'] == 'open' or fully_cancelled
                 order_obj = trade.select_order_by_order_id(order['order_id'])
