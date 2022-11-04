@@ -54,6 +54,11 @@ python-dateutil==2.8.2
 
 # MQTT
 paho-mqtt
+
+# Pyston perf
+pyston_lite_autoload
+
+
 #Futures
 schedule==1.1.0
 
