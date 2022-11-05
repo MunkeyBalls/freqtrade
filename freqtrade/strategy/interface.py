@@ -1099,9 +1099,7 @@ class IStrategy(ABC, HyperStrategyMixin):
                 else:
                     logger.warning("Trail percentage function did not return valid stoploss")
                     
-        sl_lower_long = (trade.stop_loss < (low or current_rate) and not trade.is_short)
-        sl_higher_short = (trade.stop_loss > (high or current_rate) and trade.is_short)
-        if self.trailing_stop and (sl_lower_long or sl_higher_short):
+        if self.trailing_stop and dir_correct:
             # trailing stoploss handling
             sl_offset = self.trailing_stop_positive_offset
             # Make sure current_profit is calculated using high for backtesting.
