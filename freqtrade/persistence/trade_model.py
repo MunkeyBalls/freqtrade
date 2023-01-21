@@ -493,7 +493,7 @@ class LocalTrade():
     def to_json(self, minified: bool = False) -> Dict[str, Any]:
         filled_orders = self.select_filled_or_open_orders()
         orders = [order.to_json(self.entry_side, minified) for order in filled_orders]
-        
+
         return {
             'trade_id': self.id,
             'pair': self.pair,
