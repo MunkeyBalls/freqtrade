@@ -301,67 +301,6 @@ class RPC:
                 columns.append('# Entries')
             return trades_list, columns, fiat_profit_sum
 
-    def _rpc_split(self, id: str, number: int) ->  Tuple[List]:
-        trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
-        pairtrade = Trade.get_trades(trade_filter).first() 
-
-        if not pairtrade:
-            raise RPCException(f"Pair not found")        
-       
-        if number is None or number <= 0:
-            number = 2
-
-        min_stake_amount = self._freqtrade.exchange.get_min_pair_stake_amount(pairtrade.pair,
-                                                                   pairtrade.open_rate,
-                                                                   pairtrade.stop_loss)
-        
-        if (pairtrade.stake_amount / number) < min_stake_amount:
-            raise RPCException(f"Can't split trade, minimal stake amount > {min_stake_amount}")
-        
-        pairtrades_list = []
-        for i in range(int(number)):
-            new_trade = Trade(
-                pair=pairtrade.pair,
-                base_currency=pairtrade.base_currency,
-                stake_currency=pairtrade.stake_currency,
-                stake_amount=pairtrade.stake_amount / number,
-                amount=pairtrade.amount / number,
-                is_open=pairtrade.is_open,
-                amount_requested=pairtrade.amount_requested / number,
-                fee_open=pairtrade.fee_open / number,
-                fee_open_currency=pairtrade.fee_open_currency,
-                fee_open_cost=pairtrade.fee_open_cost / number,
-                fee_close=pairtrade.fee_close / number,
-                open_rate=pairtrade.open_rate,
-                open_rate_requested=pairtrade.open_rate_requested,
-                open_date=pairtrade.open_date,
-                exchange=pairtrade.exchange,
-                open_order_id=pairtrade.open_order_id,
-                strategy=pairtrade.strategy,
-                hold_pct=pairtrade.hold_pct,
-                enter_tag=pairtrade.enter_tag,
-                timeframe=pairtrade.timeframe,
-                leverage=pairtrade.leverage,
-                is_short=pairtrade.is_short,
-                interest_rate=pairtrade.interest_rate,
-                liquidation_price=pairtrade.liquidation_price,
-                trading_mode=pairtrade.trading_mode,
-                funding_fees=pairtrade.funding_fees / number,
-                max_rate=pairtrade.max_rate,
-                min_rate=pairtrade.min_rate,
-                initial_stop_loss=pairtrade.initial_stop_loss,
-                stoploss_order_id=pairtrade.stoploss_order_id,
-                stoploss_last_update=pairtrade.stoploss_last_update,
-            )
-            #self.update_trade_to_merge(new_trade, pairtrade.open_order_id)
-            Trade.query.session.add(new_trade)
-            Trade.commit()
-            pairtrades_list.append(new_trade.id)
-        
-        pairtrade.delete()
-
-        return pairtrades_list
-
     def _rpc_update_trail(self, id: str, pct: float) -> Tuple[str, float]:
         trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
         trade = Trade.get_trades(trade_filter).first() 

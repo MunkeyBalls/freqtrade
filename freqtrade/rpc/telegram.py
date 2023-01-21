@@ -126,7 +126,7 @@ class Telegram(RPCHandler):
             r'/stopbuy$', r'/stopentry$', r'/reload_config$', r'/show_config$',
             r'/logs$', r'/whitelist$', r'/whitelist(\ssorted|\sbaseonly)+$',
             r'/blacklist$', r'/bl_delete$',
-            r'/split$', r'/trail$', r'/hold$', r'/max_trades$',
+            r'/trail$', r'/hold$', r'/max_trades$',
             r'/cancel_entries$', r'/open_orders$',
             r'/weekly$', r'/weekly \d+$', r'/monthly$', r'/monthly \d+$',
             r'/forcebuy$', r'/forcelong$', r'/forceshort$',
@@ -199,7 +199,6 @@ class Telegram(RPCHandler):
             CommandHandler('health', self._health),
             CommandHandler('help', self._help),
             CommandHandler('version', self._version),
-            CommandHandler('split', self._split),
             CommandHandler('hold', self._update_hold),
             CommandHandler('trail', self._update_trail),
             CommandHandler('max_trades', self._max_trades),
@@ -690,26 +689,7 @@ class Telegram(RPCHandler):
                 message = "\n".join(lines[:-1] + [lines[1]] + [lines[-1]])
             self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML,
                            reload_able=True, callback_path="update_status_table",
-                           query=update.callback_query)
-
-    @authorized_only
-    def _split(self, update: Update, context: CallbackContext) -> None:
-        id = context.args[0] if context.args and len(context.args) > 0 else None
-
-        if len(context.args) > 1:
-            number = int(context.args[1])
-        else:
-            number = 2
-
-        if not id:
-            self._send_msg("PairId required to split")
-
-        try:
-            if id:
-                trade_id_list = self._rpc._rpc_split(id, number) 
-                self._send_msg(f"Trade {id} has been split in {number} resulting in orders: {trade_id_list}.")           
-        except RPCException as e:
-            self._send_msg(str(e))
+                           query=update.callback_query)   
 
     @authorized_only
     def _update_trail(self, update: Update, context: CallbackContext) -> None:
@@ -1749,8 +1729,7 @@ class Telegram(RPCHandler):
             "*/version:* `Show version`\n"
 
             "_CustomCommands_\n"
-            "------------\n"            
-            "*/split <trade_id> [<n>]:* `DEPRECATED - migrate to position_adjustment_enable`\n"
+            "------------\n"
             "*/reset_trade <trade_id>|all:* `Reset open_date, min and max_rate and stoploss for the given trade or all trades`\n"
             "*/add_lock <trade_id> [<minutes>]:* `Add a pair lock`\n"
             "*/hold <id> [<percentage>]:* `Hold a pair until profit percentage is met. Also disables re-buy for now.`\n"
