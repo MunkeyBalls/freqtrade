@@ -614,7 +614,7 @@ def test_backtest__enter_trade_futures(default_conf_usdt, fee, mocker) -> None:
     assert trade is None
 
 
-def test_backtest__get_sell_trade_entry(default_conf, fee, mocker) -> None:
+def test_backtest__check_trade_exit(default_conf, fee, mocker) -> None:
     default_conf['use_exit_signal'] = False
     mocker.patch('freqtrade.exchange.Exchange.get_fee', fee)
     mocker.patch("freqtrade.exchange.Exchange.get_min_pair_stake_amount", return_value=0.00001)
@@ -660,7 +660,7 @@ def test_backtest__get_sell_trade_entry(default_conf, fee, mocker) -> None:
     ]
 
     # No data available.
-    res = backtesting._get_exit_trade_entry(trade, row_sell, True)
+    res = backtesting._check_trade_exit(trade, row_sell)
     assert res is not None
     assert res.exit_reason == ExitType.ROI.value
     assert res.close_date_utc == datetime(2020, 1, 1, 5, 0, tzinfo=timezone.utc)
@@ -673,7 +673,7 @@ def test_backtest__get_sell_trade_entry(default_conf, fee, mocker) -> None:
         [], columns=['date', 'open', 'high', 'low', 'close', 'enter_long', 'exit_long',
                      'enter_short', 'exit_short', 'long_tag', 'short_tag', 'exit_tag'])
 
-    res = backtesting._get_exit_trade_entry(trade, row, True)
+    res = backtesting._check_trade_exit(trade, row)
     assert res is None
 
 
@@ -933,6 +933,75 @@ def test_backtest_one_detail_futures(
                 t["close_rate"], 6) <= round(ln2.iloc[0]["high"], 6))
     assert -0.0181 < Trade.trades[1].funding_fees < -0.01
     # assert late_entry > 0
+
+
+@pytest.mark.parametrize('use_detail', [True, False])
+def test_backtest_one_detail_futures_funding_fees(
+        default_conf_usdt, fee, mocker, testdatadir, use_detail) -> None:
+    default_conf_usdt['use_exit_signal'] = False
+    default_conf_usdt['trading_mode'] = 'futures'
+    default_conf_usdt['margin_mode'] = 'isolated'
+    default_conf_usdt['candle_type_def'] = CandleType.FUTURES
+    default_conf_usdt['minimal_roi'] = {'0': 1}
+    default_conf_usdt['dry_run_wallet'] = 100000
+
+    mocker.patch('freqtrade.exchange.Exchange.get_fee', fee)
+    mocker.patch("freqtrade.exchange.Exchange.get_min_pair_stake_amount", return_value=0.00001)
+    mocker.patch("freqtrade.exchange.Exchange.get_max_pair_stake_amount", return_value=float('inf'))
+    mocker.patch('freqtrade.plugins.pairlistmanager.PairListManager.whitelist',
+                 PropertyMock(return_value=['XRP/USDT:USDT']))
+    mocker.patch("freqtrade.exchange.Exchange.get_maintenance_ratio_and_amt",
+                 return_value=(0.01, 0.01))
+    default_conf_usdt['timeframe'] = '1h'
+    if use_detail:
+        default_conf_usdt['timeframe_detail'] = '5m'
+    patch_exchange(mocker)
+
+    def advise_entry(df, *args, **kwargs):
+        # Mock function to force several entries
+        df.loc[:, 'enter_long'] = 1
+        return df
+
+    def adjust_trade_position(trade, current_time, **kwargs):
+        if current_time > datetime(2021, 11, 18, 2, 0, 0, tzinfo=timezone.utc):
+            return None
+        return default_conf_usdt['stake_amount']
+
+    default_conf_usdt['max_open_trades'] = 1
+
+    backtesting = Backtesting(default_conf_usdt)
+    backtesting._set_strategy(backtesting.strategylist[0])
+    backtesting.strategy.populate_entry_trend = advise_entry
+    backtesting.strategy.adjust_trade_position = adjust_trade_position
+    backtesting.strategy.leverage = lambda **kwargs: 1
+    backtesting.strategy.position_adjustment_enable = True
+    pair = 'XRP/USDT:USDT'
+    # Pick a timerange adapted to the pair we use to test
+    timerange = TimeRange.parse_timerange('20211117-20211119')
+    data = history.load_data(datadir=Path(testdatadir), timeframe='1h', pairs=[pair],
+                             timerange=timerange, candle_type=CandleType.FUTURES)
+    backtesting.load_bt_data_detail()
+    processed = backtesting.strategy.advise_all_indicators(data)
+    min_date, max_date = get_timerange(processed)
+
+    result = backtesting.backtest(
+        processed=deepcopy(processed),
+        start_date=min_date,
+        end_date=max_date,
+    )
+    results = result['results']
+    assert not results.empty
+    # Only one result - as we're not selling.
+    assert len(results) == 1
+
+    assert 'orders' in results.columns
+
+    for t in Trade.trades:
+        # At least 4 adjustment orders
+        assert t.nr_of_successful_entries >= 6
+        # Funding fees will vary depending on the number of adjustment orders
+        # That number is a lot higher with detail data.
+        assert -20 < t.funding_fees < -0.1
 
 
 def test_backtest_timedout_entry_orders(default_conf, fee, mocker, testdatadir) -> None:

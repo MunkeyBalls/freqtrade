@@ -50,7 +50,7 @@ def test_stoploss_order_binance(default_conf, mocker, limitratio, expected, side
         )
 
     api_mock.create_order.reset_mock()
-    order_types = {'stoploss': 'limit'}
+    order_types = {'stoploss': 'limit', 'stoploss_price_type': 'mark'}
     if limitratio is not None:
         order_types.update({'stoploss_on_exchange_limit_ratio': limitratio})
 
@@ -75,7 +75,7 @@ def test_stoploss_order_binance(default_conf, mocker, limitratio, expected, side
     if trademode == TradingMode.SPOT:
         params_dict = {'stopPrice': 220}
     else:
-        params_dict = {'stopPrice': 220, 'reduceOnly': True}
+        params_dict = {'stopPrice': 220, 'reduceOnly': True, 'workingType': 'MARK_PRICE'}
     assert api_mock.create_order.call_args_list[0][1]['params'] == params_dict
 
     # test exception handling
@@ -522,8 +522,15 @@ def test__set_leverage_binance(mocker, default_conf):
     api_mock.set_leverage = MagicMock()
     type(api_mock).has = PropertyMock(return_value={'setLeverage': True})
     default_conf['dry_run'] = False
-    exchange = get_patched_exchange(mocker, default_conf, id="binance")
-    exchange._set_leverage(3.0, trading_mode=TradingMode.MARGIN)
+    default_conf['trading_mode'] = TradingMode.FUTURES
+    default_conf['margin_mode'] = MarginMode.ISOLATED
+
+    exchange = get_patched_exchange(mocker, default_conf, api_mock, id="binance")
+    exchange._set_leverage(3.2, 'BTC/USDT:USDT')
+    assert api_mock.set_leverage.call_count == 1
+    # Leverage is rounded to 3.
+    assert api_mock.set_leverage.call_args_list[0][1]['leverage'] == 3
+    assert api_mock.set_leverage.call_args_list[0][1]['symbol'] == 'BTC/USDT:USDT'
 
     ccxt_exceptionhandlers(
         mocker,

@@ -598,7 +598,7 @@ class IStrategy(ABC, HyperStrategyMixin):
         return None
 
     def populate_any_indicators(self, pair: str, df: DataFrame, tf: str,
-                                informative: DataFrame = None,
+                                informative: Optional[DataFrame] = None,
                                 set_generalized_indicators: bool = False) -> DataFrame:
         """
         DEPRECATED - USE FEATURE ENGINEERING FUNCTIONS INSTEAD
@@ -614,8 +614,8 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         return df
 
-    def feature_engineering_expand_all(self, dataframe: DataFrame,
-                                       period: int, **kwargs):
+    def feature_engineering_expand_all(self, dataframe: DataFrame, period: int,
+                                       metadata: Dict, **kwargs):
         """
         *Only functional with FreqAI enabled strategies*
         This function will automatically expand the defined features on the config defined
@@ -634,13 +634,14 @@ class IStrategy(ABC, HyperStrategyMixin):
 
         https://www.freqtrade.io/en/latest/freqai-feature-engineering/#defining-the-features
 
-        :param df: strategy dataframe which will receive the features
+        :param dataframe: strategy dataframe which will receive the features
         :param period: period of the indicator - usage example:
+        :param metadata: metadata of current pair
         dataframe["%-ema-period"] = ta.EMA(dataframe, timeperiod=period)
         """
         return dataframe
 
-    def feature_engineering_expand_basic(self, dataframe: DataFrame, **kwargs):
+    def feature_engineering_expand_basic(self, dataframe: DataFrame, metadata: Dict, **kwargs):
         """
         *Only functional with FreqAI enabled strategies*
         This function will automatically expand the defined features on the config defined
@@ -662,13 +663,14 @@ class IStrategy(ABC, HyperStrategyMixin):
 
         https://www.freqtrade.io/en/latest/freqai-feature-engineering/#defining-the-features
 
-        :param df: strategy dataframe which will receive the features
+        :param dataframe: strategy dataframe which will receive the features
+        :param metadata: metadata of current pair
         dataframe["%-pct-change"] = dataframe["close"].pct_change()
         dataframe["%-ema-200"] = ta.EMA(dataframe, timeperiod=200)
         """
         return dataframe
 
-    def feature_engineering_standard(self, dataframe: DataFrame, **kwargs):
+    def feature_engineering_standard(self, dataframe: DataFrame, metadata: Dict, **kwargs):
         """
         *Only functional with FreqAI enabled strategies*
         This optional function will be called once with the dataframe of the base timeframe.
@@ -686,12 +688,13 @@ class IStrategy(ABC, HyperStrategyMixin):
 
         https://www.freqtrade.io/en/latest/freqai-feature-engineering
 
-        :param df: strategy dataframe which will receive the features
+        :param dataframe: strategy dataframe which will receive the features
+        :param metadata: metadata of current pair
         usage example: dataframe["%-day_of_week"] = (dataframe["date"].dt.dayofweek + 1) / 7
         """
         return dataframe
 
-    def set_freqai_targets(self, dataframe, **kwargs):
+    def set_freqai_targets(self, dataframe: DataFrame, metadata: Dict, **kwargs):
         """
         *Only functional with FreqAI enabled strategies*
         Required function to set the targets for the model.
@@ -701,7 +704,8 @@ class IStrategy(ABC, HyperStrategyMixin):
 
         https://www.freqtrade.io/en/latest/freqai-feature-engineering
 
-        :param df: strategy dataframe which will receive the targets
+        :param dataframe: strategy dataframe which will receive the targets
+        :param metadata: metadata of current pair
         usage example: dataframe["&-target"] = dataframe["close"].shift(-1) / dataframe["close"]
         """
         return dataframe
@@ -759,7 +763,8 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         return self.__class__.__name__
 
-    def lock_pair(self, pair: str, until: datetime, reason: str = None, side: str = '*') -> None:
+    def lock_pair(self, pair: str, until: datetime,
+                  reason: Optional[str] = None, side: str = '*') -> None:
         """
         Locks pair until a given timestamp happens.
         Locked pairs are not analyzed, and are prevented from opening new trades.
@@ -791,7 +796,8 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         PairLocks.unlock_reason(reason, datetime.now(timezone.utc))
 
-    def is_pair_locked(self, pair: str, *, candle_date: datetime = None, side: str = '*') -> bool:
+    def is_pair_locked(self, pair: str, *, candle_date: Optional[datetime] = None,
+                       side: str = '*') -> bool:
         """
         Checks if a pair is currently locked
         The 2nd, optional parameter ensures that locks are applied until the new candle arrives,
@@ -962,7 +968,7 @@ class IStrategy(ABC, HyperStrategyMixin):
         pair: str,
         timeframe: str,
         dataframe: DataFrame,
-        is_short: bool = None
+        is_short: Optional[bool] = None
     ) -> Tuple[bool, bool, Optional[str]]:
         """
         Calculates current exit signal based based on the dataframe
@@ -1061,7 +1067,7 @@ class IStrategy(ABC, HyperStrategyMixin):
 
     def should_exit(self, trade: Trade, rate: float, current_time: datetime, *,
                     enter: bool, exit_: bool,
-                    low: float = None, high: float = None,
+                    low: Optional[float] = None, high: Optional[float] = None,
                     force_stoploss: float = 0) -> List[ExitCheckTuple]:
         """
         This function evaluates if one of the conditions required to trigger an exit order
@@ -1149,8 +1155,8 @@ class IStrategy(ABC, HyperStrategyMixin):
 
     def stop_loss_reached(self, current_rate: float, trade: Trade,
                           current_time: datetime, current_profit: float,
-                          force_stoploss: float, low: float = None,
-                          high: float = None) -> ExitCheckTuple:
+                          force_stoploss: float, low: Optional[float] = None,
+                          high: Optional[float] = None) -> ExitCheckTuple:
         """
         Based on current profit of the trade and configured (trailing) stoploss,
         decides to exit or not

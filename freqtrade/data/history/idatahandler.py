@@ -308,7 +308,7 @@ class IDataHandler(ABC):
             timerange=timerange_startup,
             candle_type=candle_type
         )
-        if self._check_empty_df(pairdf, pair, timeframe, candle_type, warn_no_data, True):
+        if self._check_empty_df(pairdf, pair, timeframe, candle_type, warn_no_data):
             return pairdf
         else:
             enddate = pairdf.iloc[-1]['date']
@@ -316,7 +316,7 @@ class IDataHandler(ABC):
             if timerange_startup:
                 self._validate_pairdata(pair, pairdf, timeframe, candle_type, timerange_startup)
                 pairdf = trim_dataframe(pairdf, timerange_startup)
-                if self._check_empty_df(pairdf, pair, timeframe, candle_type, warn_no_data):
+                if self._check_empty_df(pairdf, pair, timeframe, candle_type, warn_no_data, True):
                     return pairdf
 
             # incomplete candles should only be dropped if we didn't trim the end beforehand.
@@ -418,8 +418,8 @@ def get_datahandlerclass(datatype: str) -> Type[IDataHandler]:
         raise ValueError(f"No datahandler for datatype {datatype} available.")
 
 
-def get_datahandler(datadir: Path, data_format: str = None,
-                    data_handler: IDataHandler = None) -> IDataHandler:
+def get_datahandler(datadir: Path, data_format: Optional[str] = None,
+                    data_handler: Optional[IDataHandler] = None) -> IDataHandler:
     """
     :param datadir: Folder to save data
     :param data_format: dataformat to use
