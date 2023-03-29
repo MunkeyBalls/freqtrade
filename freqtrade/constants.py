@@ -36,9 +36,10 @@ AVAILABLE_PAIRLISTS = ['StaticPairList', 'VolumePairList', 'ProducerPairList', '
                        'AgeFilter', 'OffsetFilter', 'PerformanceFilter',
                        'PrecisionFilter', 'PriceFilter', 'RangeStabilityFilter',
                        'ShuffleFilter', 'SpreadFilter', 'VolatilityFilter']
-AVAILABLE_PROTECTIONS = ['CooldownPeriod', 'LowProfitPairs', 'MaxDrawdown', 'StoplossGuard']
-AVAILABLE_DATAHANDLERS_TRADES = ['json', 'jsongz', 'hdf5']
-AVAILABLE_DATAHANDLERS = AVAILABLE_DATAHANDLERS_TRADES + ['feather', 'parquet']
+AVAILABLE_PROTECTIONS = ['CooldownPeriod',
+                         'LowProfitPairs', 'MaxDrawdown', 'StoplossGuard']
+AVAILABLE_DATAHANDLERS_TRADES = ['json', 'jsongz', 'hdf5', 'feather']
+AVAILABLE_DATAHANDLERS = AVAILABLE_DATAHANDLERS_TRADES + ['parquet']
 BACKTEST_BREAKDOWNS = ['day', 'week', 'month']
 BACKTEST_CACHE_AGE = ['none', 'day', 'week', 'month']
 BACKTEST_CACHE_DEFAULT = 'day'
@@ -625,7 +626,7 @@ CONF_SCHEMA = {
                 "enabled": {"type": "boolean", "default": False},
                 "keras": {"type": "boolean", "default": False},
                 "write_metrics_to_disk": {"type": "boolean", "default": False},
-                "purge_old_models": {"type": "boolean", "default": True},
+                "purge_old_models": {"type": ["boolean", "number"], "default": 2},
                 "conv_width": {"type": "integer", "default": 1},
                 "train_period_days": {"type": "integer", "default": 0},
                 "backtest_period_days": {"type": "number", "default": 7},
@@ -647,7 +648,9 @@ CONF_SCHEMA = {
                                            "shuffle": {"type": "boolean", "default": False},
                                            "nu": {"type": "number", "default": 0.1}
                                            },
-                                       }
+                                       },
+                        "shuffle_after_split": {"type": "boolean", "default": False},
+                        "buffer_train_data_candles": {"type": "integer", "default": 0}
                     },
                     "required": ["include_timeframes", "include_corr_pairlist", ]
                 },
@@ -665,6 +668,7 @@ CONF_SCHEMA = {
                 "rl_config": {
                     "type": "object",
                     "properties": {
+                        "drop_ohlc_from_features": {"type": "boolean", "default": False},
                         "train_cycles": {"type": "integer"},
                         "max_trade_duration_candles": {"type": "integer"},
                         "add_state_info": {"type": "boolean", "default": False},
@@ -760,6 +764,7 @@ EntryExit = Literal['entry', 'exit']
 BuySell = Literal['buy', 'sell']
 MakerTaker = Literal['maker', 'taker']
 BidAsk = Literal['bid', 'ask']
+OBLiteral = Literal['asks', 'bids']
 
 Config = Dict[str, Any]
 IntOrInf = float
