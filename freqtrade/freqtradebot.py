@@ -1348,15 +1348,17 @@ class FreqtradeBot(LoggingMixin):
                 if not trade.open_order_id:
                     continue
 
-                orders = []                
+                orders = []
+                #logger.warning(f'-------Checking open orders-------')
                 open_orders = [x for x in trade.orders if x.status == 'open' or x.status == None]
                 #logger.warning(f'Manage open tradeid: {trade.open_order_id} orders: {trade.orders}')
                 if open_orders:
-                    sorted_orders = sorted(open_orders, key=lambda x: (x.side, -x.price), reverse=False)
+                    #logger.warning(f'Open orders: {open_orders}')
+                    sorted_orders = sorted(open_orders, key=lambda x: (x.ft_order_side, -x.ft_price), reverse=False)
                     #logger.warning(f'Sorted entries: {sorted_orders}')
-                
-                    open_entry = sorted_orders[0].order_id if sorted_orders[0].side == trade.entry_side else None
-                    open_exit = sorted_orders[-1].order_id if sorted_orders[-1].side == trade.exit_side else None                    
+
+                    open_entry = sorted_orders[0].order_id if sorted_orders[0].ft_order_side == trade.entry_side else None
+                    open_exit = sorted_orders[-1].order_id if sorted_orders[-1].ft_order_side == trade.exit_side else None                    
                     #logger.warning(f'First entry: {open_entry}')
                     #logger.warning(f'Last (exit) entries: {open_exit}')                
                           
@@ -1374,6 +1376,7 @@ class FreqtradeBot(LoggingMixin):
                 logger.info('Cannot query order for %s due to %s', trade, traceback.format_exc())
                 continue
                 
+            #logger.warning(f'Open orders: {orders}')
             for order in orders: 
                 #logger.warning(f'Checking open order: {order}')      
                 fully_cancelled = self.update_trade_state(trade, order['id'], order)
@@ -1381,12 +1384,12 @@ class FreqtradeBot(LoggingMixin):
                 order_obj = trade.select_order_by_order_id(order['order_id'])
                 hold_entry = trade.hold_pct != 0 and (order['side'] == trade.entry_side or (order['side'] == trade.exit_side and trade.exit_reason == 'force_exit'))
 
-            if not_closed and not hold_entry:
-                if fully_cancelled or (order_obj and self.strategy.ft_check_timed_out(
-                   trade, order_obj, datetime.now(timezone.utc))):
-                    self.handle_cancel_order(order, trade, constants.CANCEL_REASON['TIMEOUT'])
-                else:
-                    self.replace_order(order, order_obj, trade)
+                if not_closed and not hold_entry:
+                    if fully_cancelled or (order_obj and self.strategy.ft_check_timed_out(
+                    trade, order_obj, datetime.now(timezone.utc))):
+                        self.handle_cancel_order(order, trade, constants.CANCEL_REASON['TIMEOUT'])
+                    else:
+                        self.replace_order(order, order_obj, trade)
 
     def handle_cancel_order(self, order: Dict, trade: Trade, reason: str) -> None:
         """
@@ -1534,8 +1537,8 @@ class FreqtradeBot(LoggingMixin):
                 reason += f", {constants.CANCEL_REASON['FULLY_CANCELLED']}"
             else:
                 self.update_trade_state(trade, trade.open_order_id, corder) # Why is it using open_order_id instead of id on order?
-                #logger.warning(f'Order data: {trade.orders}')
-                sorted_orders = sorted(trade.orders, key=lambda x: x.price, reverse=True)
+                logger.warning(f'Order data: {trade.orders}')
+                sorted_orders = sorted(trade.orders, key=lambda x: x.ft_price, reverse=True)
                 trade.open_order_id = next((orderLoc.order_id for orderLoc in sorted_orders if orderLoc.status == 'open' and orderLoc.order_id != order['id']), None)
                 logger.warning(f'Modified open order id to {trade.open_order_id}')
                 
@@ -1544,8 +1547,8 @@ class FreqtradeBot(LoggingMixin):
             # update_trade_state (and subsequently recalc_trade_from_orders) will handle updates
             # to the trade object
             self.update_trade_state(trade, trade.open_order_id, corder)
-            #logger.warning(f'Order data: {trade.orders}')          
-            sorted_orders = sorted(trade.orders, key=lambda x: x.price, reverse=True) 
+            logger.warning(f'Order data: {trade.orders}')          
+            sorted_orders = sorted(trade.orders, key=lambda x: x.ft_price, reverse=True) 
             trade.open_order_id = next((orderLoc.order_id for orderLoc in sorted_orders if orderLoc.status == 'open' and orderLoc.order_id != order['id']), None)
             logger.warning(f'Modified open order id to {trade.open_order_id}')
             logger.info(f'Partial {trade.entry_side} order timeout for {trade}.')

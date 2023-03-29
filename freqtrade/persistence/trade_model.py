@@ -115,7 +115,8 @@ class Order(_DECL_BASE):
 
         return (f'Order(id={self.id}, order_id={self.order_id}, trade_id={self.ft_trade_id}, '
                 f'side={self.side}, order_type={self.order_type}, status={self.status},' 
-                f'price={self.price}, remaining={self.remaining}')
+                f'price={self.price}, remaining={self.remaining}, ft_price={self.ft_price}, '
+                f'ft_order_side={self.ft_order_side}')
 
     def update_from_ccxt_object(self, order):
         """
@@ -201,6 +202,7 @@ class Order(_DECL_BASE):
                 'trade_id': self.ft_trade_id,
                 'id': self.id,
                 'price': self.price,
+                'ft_price': self.ft_price
             })
         return resp
 
