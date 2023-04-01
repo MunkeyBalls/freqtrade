@@ -204,7 +204,7 @@ class Telegram(RPCHandler):
             CommandHandler('health', self._health),
             CommandHandler('help', self._help),
             CommandHandler('version', self._version),
-            CommandHandler('marketdir', self._changemarketdir)
+            CommandHandler('marketdir', self._changemarketdir),
             CommandHandler('hold', self._update_hold),
             CommandHandler('trail', self._update_trail),
             CommandHandler('max_trades', self._max_trades),
