@@ -1307,8 +1307,8 @@ class Trade(ModelBase, LocalTrade):
     funding_fees: Mapped[Optional[float]] = mapped_column(
         Float(), nullable=True, default=None)  # type: ignore
 
-    hold_pct = Column(Float, nullable=True, default=0.0)
-    trail_pct = Column(Float, nullable=True, default=0.0)
+    hold_pct: Mapped[float] = mapped_column(Float(), nullable=True, default=0.0)
+    trail_pct: Mapped[float] = mapped_column(Float(), nullable=True, default=0.0)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
