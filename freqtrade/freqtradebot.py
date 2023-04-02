@@ -857,17 +857,17 @@ class FreqtradeBot(LoggingMixin):
 
     def update_hold(self, id: str, pct: float) -> bool:
         trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
-        pairtrade = Trade.get_trades(trade_filter).order_by(Trade.id).first()        
+        pairtrade = Trade.get_trades(trade_filter).first()        
         if not pairtrade:
             return False
 
-        pairtrade.hold_pct =  pct if pct else 0.0
+        pairtrade.hold_pct = pct if pct else 0.0
         
         Trade.commit()
 
     def update_trail(self, id: str, pct: float) -> bool:
         trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
-        pairtrade = Trade.get_trades(trade_filter).order_by(Trade.id).first()        
+        pairtrade = Trade.get_trades(trade_filter).first()
         if not pairtrade:
             return False
 
