@@ -1378,7 +1378,7 @@ class Telegram(RPCHandler):
                 price = float(context.args[1]) if len(context.args) == 2 else None
                 await self._force_exit_action(trade_id, price=price)
             except ValueError:
-                self.send_msg(msg=f'Requested price {context.args[1]} is not a float.')
+                await self.send_msg(msg=f'Requested price {context.args[1]} is not a float.')
             
         else:
             fiat_currency = self._config.get('fiat_display_currency', '')
