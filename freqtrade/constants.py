@@ -65,6 +65,7 @@ TELEGRAM_SETTING_OPTIONS = ['on', 'off', 'silent']
 MQTT_SETTING_OPTIONS = ['on', 'off']
 WEBHOOK_FORMAT_OPTIONS = ['form', 'json', 'raw']
 FULL_DATAFRAME_THRESHOLD = 100
+CUSTOM_TAG_MAX_LENGTH = 255
 
 ENV_VAR_PREFIX = 'FREQTRADE__'
 
@@ -677,7 +678,8 @@ CONF_SCHEMA = {
                         "model_type": {"type": "string", "default": "PPO"},
                         "policy_type": {"type": "string", "default": "MlpPolicy"},
                         "net_arch": {"type": "array", "default": [128, 128]},
-                        "randomize_startinng_position": {"type": "boolean", "default": False},
+                        "randomize_starting_position": {"type": "boolean", "default": False},
+                        "progress_bar": {"type": "boolean", "default": True},
                         "model_reward_parameters": {
                             "type": "object",
                             "properties": {
