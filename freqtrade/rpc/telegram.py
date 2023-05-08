@@ -770,7 +770,7 @@ class Telegram(RPCHandler):
                                  query=update.callback_query)
 
     @authorized_only
-    def _update_trail(self, update: Update, context: CallbackContext) -> None:
+    async def _update_trail(self, update: Update, context: CallbackContext) -> None:
         try:
             if context.args:
                 id = context.args[0] if context.args and len(context.args) > 0 else None
@@ -785,9 +785,9 @@ class Telegram(RPCHandler):
             if id and pct is not None:
                 self._rpc._rpc_update_trail(id, pct)
                 if pct != 0.0:
-                    self._send_msg(f"Set trade {id} to trail from {pct * 100}%")
+                    await self._send_msg(f"Set trade {id} to trail from {pct * 100}%")
                 else:
-                    self._send_msg(f"Disabled trailing on {id}")
+                    await self._send_msg(f"Disabled trailing on {id}")
 
             # TODO: Put in it's own method
             statlist, head = self._rpc._rpc_status_trail()        
@@ -798,13 +798,13 @@ class Telegram(RPCHandler):
                 message = tabulate(trades,
                                 headers=head,
                                 tablefmt='simple')               
-                self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML, reload_able=True, 
+                await self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML, reload_able=True, 
                 callback_path="update_update_trail", query=update.callback_query)
         except RPCException as e:
-            self._send_msg(str(e))
+            await self._send_msg(str(e))
 
     @authorized_only
-    def _update_hold(self, update: Update, context: CallbackContext) -> None:
+    async def _update_hold(self, update: Update, context: CallbackContext) -> None:
         id = context.args[0] if context.args and len(context.args) > 0 else None
 
         if context.args and len(context.args) > 1:
@@ -816,9 +816,9 @@ class Telegram(RPCHandler):
             if id:
                 self._rpc._rpc_update_hold(id, pct)
                 if pct != 0:
-                    self._send_msg(f"Set trade {id} to hold until {pct * 100}%")
+                    await self._send_msg(f"Set trade {id} to hold until {pct * 100}%")
                 else:
-                    self._send_msg(f"Removed trade {id} from hold") 
+                    await self._send_msg(f"Removed trade {id} from hold") 
 
             # Put in it's own method
             statlist, head = self._rpc._rpc_status_hold()        
@@ -829,10 +829,10 @@ class Telegram(RPCHandler):
                 message = tabulate(trades,
                                 headers=head,
                                 tablefmt='simple')               
-                self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML, reload_able=True, 
+                await self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML, reload_able=True, 
                     callback_path="update_update_hold", query=update.callback_query)
         except RPCException as e:
-            self._send_msg(str(e))
+            await self._send_msg(str(e))
 
     async def _timeunit_stats(self, update: Update, context: CallbackContext, unit: str) -> None:
         """
@@ -1175,7 +1175,7 @@ class Telegram(RPCHandler):
         await self._send_msg(f"Status: `{msg['status']}`")
 
     @authorized_only
-    def _max_trades(self, update: Update, context: CallbackContext) -> None:
+    async def _max_trades(self, update: Update, context: CallbackContext) -> None:
         """
         Handler for /max_trades <id>.
         Set max number of trades
@@ -1186,17 +1186,17 @@ class Telegram(RPCHandler):
         try:
             max_trades = int(context.args[0]) if context.args else None
         except (TypeError, ValueError, IndexError):
-            self._send_msg("You must specify a maximum number of trades")
+            await self._send_msg("You must specify a maximum number of trades")
             return
   
         try:
             msg = self._rpc._rpc_max_open_trades(max_trades)
-            self._send_msg(msg["result"])
+            await self._send_msg(msg["result"])
         except RPCException as e:
-            self._send_msg(str(e))            
+            await self._send_msg(str(e))            
 
     @authorized_only
-    def _reset_trade(self, update: Update, context: CallbackContext) -> None:
+    async def _reset_trade(self, update: Update, context: CallbackContext) -> None:
         """
         Handler for /reset_trade <id>.
         Resets some details of the trade
@@ -1206,18 +1206,18 @@ class Telegram(RPCHandler):
         """
         trade_id = context.args[0] if context.args and len(context.args) > 0 else None
         if not trade_id:
-            self._send_msg("You must specify a trade-id or 'all'.")
+            await self._send_msg("You must specify a trade-id or 'all'.")
             return
         try:
             msg = self._rpc._rpc_reset_trade(trade_id)
-            self._send_msg('Reset trade result: `{result}`'.format(**msg))
+            await self._send_msg('Reset trade result: `{result}`'.format(**msg))
 
         except RPCException as e:
-            self._send_msg(str(e))
+            await self._send_msg(str(e))
 
     # TODO: Cancel by 'all' or specific ORDER id, instead of trade.. Or maybe both? 
     @authorized_only
-    def _cancel_open_entries(self, update: Update, context: CallbackContext) -> None:
+    async def _cancel_open_entries(self, update: Update, context: CallbackContext) -> None:
         """
         Handler for /cancel_entries <id>.
         Cancels open entries for specific trade
@@ -1231,11 +1231,11 @@ class Telegram(RPCHandler):
             try:
                 self._rpc._rpc_cancel_open_entries(trade_id=trade_id) # Temp using for listing entries
             except RPCException:
-                self._send_msg(msg='No open trade found.')
+                await self._send_msg(msg='No open trade found.')
                 return
 
     @authorized_only
-    def _get_open_orders(self, update: Update, context: CallbackContext) -> None:
+    async def _get_open_orders(self, update: Update, context: CallbackContext) -> None:
         """
         Handler for /open_orders <id>.
         Cancels open entries for specific trade
@@ -1264,12 +1264,12 @@ class Telegram(RPCHandler):
                     ],
                 tablefmt='simple')
                 message = (f"<pre>{orders_tab}</pre>" if orders['orders_count'] > 0 else '')
-                self._send_msg(message, parse_mode=ParseMode.HTML)
+                await self._send_msg(message, parse_mode=ParseMode.HTML)
             except RPCException as e:
-                self._send_msg(str(e))
+                await self._send_msg(str(e))
 
     @authorized_only
-    def _max_trades(self, update: Update, context: CallbackContext) -> None:
+    async def _max_trades(self, update: Update, context: CallbackContext) -> None:
         """
         Handler for /max_trades <id>.
         Set max number of trades
@@ -1280,17 +1280,17 @@ class Telegram(RPCHandler):
         try:
             max_trades = int(context.args[0]) if context.args else None
         except (TypeError, ValueError, IndexError):
-            self._send_msg("You must specify a maximum number of trades")
+            await self._send_msg("You must specify a maximum number of trades")
             return
   
         try:
             msg = self._rpc._rpc_max_open_trades(max_trades)
-            self._send_msg(msg["result"])
+            await self._send_msg(msg["result"])
         except RPCException as e:
-            self._send_msg(str(e))            
+            await self._send_msg(str(e))            
 
     @authorized_only
-    def _reset_trade(self, update: Update, context: CallbackContext) -> None:
+    async def _reset_trade(self, update: Update, context: CallbackContext) -> None:
         """
         Handler for /reset_trade <id>.
         Resets some details of the trade
@@ -1300,18 +1300,18 @@ class Telegram(RPCHandler):
         """
         trade_id = context.args[0] if context.args and len(context.args) > 0 else None
         if not trade_id:
-            self._send_msg("You must specify a trade-id or 'all'.")
+            await self._send_msg("You must specify a trade-id or 'all'.")
             return
         try:
             msg = self._rpc._rpc_reset_trade(trade_id)
-            self._send_msg('Reset trade result: `{result}`'.format(**msg))
+            await self._send_msg('Reset trade result: `{result}`'.format(**msg))
 
         except RPCException as e:
-            self._send_msg(str(e))
+            await self._send_msg(str(e))
 
     # TODO: Cancel by 'all' or specific ORDER id, instead of trade.. Or maybe both? 
     @authorized_only
-    def _cancel_open_entries(self, update: Update, context: CallbackContext) -> None:
+    async def _cancel_open_entries(self, update: Update, context: CallbackContext) -> None:
         """
         Handler for /cancel_entries <id>.
         Cancels open entries for specific trade
@@ -1325,11 +1325,11 @@ class Telegram(RPCHandler):
             try:
                 self._rpc._rpc_cancel_open_entries(trade_id=trade_id) # Temp using for listing entries
             except RPCException:
-                self._send_msg(msg='No open trade found.')
+                await self._send_msg(msg='No open trade found.')
                 return
 
     @authorized_only
-    def _get_open_orders(self, update: Update, context: CallbackContext) -> None:
+    async def _get_open_orders(self, update: Update, context: CallbackContext) -> None:
         """
         Handler for /open_orders <id>.
         Cancels open entries for specific trade
@@ -1358,9 +1358,9 @@ class Telegram(RPCHandler):
                     ],
                 tablefmt='simple')
                 message = (f"<pre>{orders_tab}</pre>" if orders['orders_count'] > 0 else '')
-                self._send_msg(message, parse_mode=ParseMode.HTML)
+                await self._send_msg(message, parse_mode=ParseMode.HTML)
             except RPCException as e:
-                self._send_msg(str(e))
+                await self._send_msg(str(e))
 
     @authorized_only
     async def _force_exit(self, update: Update, context: CallbackContext) -> None:
