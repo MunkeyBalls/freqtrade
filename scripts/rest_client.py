@@ -29,7 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger("ft_rest_client")
 
 
-class FtRestClient():
+class FtRestClient:
 
     def __init__(self, serverurl, username=None, password=None):
 
@@ -279,8 +279,9 @@ class FtRestClient():
         """
         data = {"pair": pair,
                 "side": side,
-                "price": price,
                 }
+        if price:
+            data['price'] = price
         return self._post("forceenter", data=data)
 
     def forceexit(self, tradeid, ordertype=None, amount=None):
@@ -312,6 +313,13 @@ class FtRestClient():
         :return: json object
         """
         return self._get(f"strategy/{strategy}")
+
+    def pairlists_available(self):
+        """Lists available pairlist providers
+
+        :return: json object
+        """
+        return self._get("pairlists/available")
 
     def plot_config(self):
         """Return plot configuration if the strategy defines one.

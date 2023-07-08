@@ -17,7 +17,6 @@ from math import isnan
 from threading import Thread
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
 
-import arrow
 from tabulate import tabulate
 from telegram import (CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton,
                       ReplyKeyboardMarkup, Update)
@@ -34,6 +33,7 @@ from freqtrade.misc import chunks, plural, round_coin_value
 from freqtrade.persistence import Trade
 from freqtrade.rpc import RPC, RPCException, RPCHandler
 from freqtrade.rpc.rpc_types import RPCSendMsg
+from freqtrade.util import dt_humanize
 
 
 MAX_MESSAGE_LENGTH = MessageLimit.MAX_TEXT_LENGTH
@@ -198,6 +198,7 @@ class Telegram(RPCHandler):
                 self._force_enter, order_side=SignalDirection.LONG)),
             CommandHandler('forceshort', partial(
                 self._force_enter, order_side=SignalDirection.SHORT)),
+            CommandHandler('reload_trade', self._reload_trade_from_exchange),
             CommandHandler('trades', self._trades),
             CommandHandler('delete', self._delete_trade),
             CommandHandler(['coo', 'cancel_open_order'], self._cancel_open_order),
@@ -562,17 +563,16 @@ class Telegram(RPCHandler):
             order_nr += 1
             wording = 'Entry' if order['ft_is_entry'] else 'Exit'
 
-            cur_entry_datetime = arrow.get(order["order_filled_date"])
             cur_entry_amount = order["filled"] or order["amount"]
             cur_entry_average = order["safe_price"]
             lines.append("  ")
             if order_nr == 1:
                 lines.append(f"*{wording} #{order_nr}:*")
                 lines.append(
-                    f"*Amount:* {cur_entry_amount} "
+                    f"*Amount:* {cur_entry_amount:.8g} "
                     f"({round_coin_value(order['cost'], quote_currency)})"
                 )
-                lines.append(f"*Average Price:* {cur_entry_average}")
+                lines.append(f"*Average Price:* {cur_entry_average:.8g}")
             else:
                 sum_stake = 0
                 sum_amount = 0
@@ -593,22 +593,14 @@ class Telegram(RPCHandler):
 
                 lines.append(f"*{wording} #{order_nr}:* at {minus_on_entry:.2%} avg Profit")
                 if is_open:
-                    lines.append("({})".format(cur_entry_datetime
-                                               .humanize(granularity=["day", "hour", "minute"])))
-                lines.append(f"*Amount:* {cur_entry_amount} "
+                    lines.append("({})".format(dt_humanize(order["order_filled_date"],
+                                                           granularity=["day", "hour", "minute"])))
+                lines.append(f"*Amount:* {cur_entry_amount:.8g} "
                              f"({round_coin_value(order['cost'], quote_currency)})")
-                lines.append(f"*Average {wording} Price:* {cur_entry_average} "
+                lines.append(f"*Average {wording} Price:* {cur_entry_average:.8g} "
                              f"({price_to_1st_entry:.2%} from 1st entry Rate)")
                 lines.append(f"*Order filled:* {order['order_filled_date']}")
 
-                # TODO: is this really useful?
-                # dur_entry = cur_entry_datetime - arrow.get(
-                #     filled_orders[x - 1]["order_filled_date"])
-                # days = dur_entry.days
-                # hours, remainder = divmod(dur_entry.seconds, 3600)
-                # minutes, seconds = divmod(remainder, 60)
-                # lines.append(
-                # f"({days}d {hours}h {minutes}m {seconds}s from previous {wording.lower()})")
             lines_detail.append("\n".join(lines))
 
         return lines_detail
@@ -644,7 +636,7 @@ class Telegram(RPCHandler):
         position_adjust = self._config.get('position_adjustment_enable', False)
         max_entries = self._config.get('max_entry_position_adjustment', -1)
         for r in results:
-            r['open_date_hum'] = arrow.get(r['open_date']).humanize()
+            r['open_date_hum'] = dt_humanize(r['open_date'])
             r['num_entries'] = len([o for o in r['orders'] if o['ft_is_entry']])
             r['num_exits'] = len([o for o in r['orders'] if not o['ft_is_entry']
                                  and not o['ft_order_side'] == 'stoploss'])
@@ -676,11 +668,11 @@ class Telegram(RPCHandler):
                 ])
 
             lines.extend([
-                "*Open Rate:* `{open_rate:.8f}`",
-                "*Close Rate:* `{close_rate:.8f}`" if r['close_rate'] else "",
+                "*Open Rate:* `{open_rate:.8g}`",
+                "*Close Rate:* `{close_rate:.8g}`" if r['close_rate'] else "",
                 "*Open Date:* `{open_date}`",
                 "*Close Date:* `{close_date}`" if r['close_date'] else "",
-                " \n*Current Rate:* `{current_rate:.8f}`" if r['is_open'] else "",
+                " \n*Current Rate:* `{current_rate:.8g}`" if r['is_open'] else "",
                 ("*Unrealized Profit:* " if r['is_open'] else "*Close Profit: *")
                 + "`{profit_ratio:.2%}` `({profit_abs_r})`",
             ])
@@ -701,9 +693,9 @@ class Telegram(RPCHandler):
                                  "`({initial_stop_loss_ratio:.2%})`")
 
                 # Adding stoploss and stoploss percentage only if it is not None
-                lines.append("*Stoploss:* `{stop_loss_abs:.8f}` " +
+                lines.append("*Stoploss:* `{stop_loss_abs:.8g}` " +
                              ("`({stop_loss_ratio:.2%})`" if r['stop_loss_ratio'] else ""))
-                lines.append("*Stoploss distance:* `{stoploss_current_dist:.8f}` "
+                lines.append("*Stoploss distance:* `{stoploss_current_dist:.8g}` "
                              "`({stoploss_current_dist_ratio:.2%})`")
                 if r['open_order']:
                     lines.append(
@@ -952,8 +944,8 @@ class Telegram(RPCHandler):
         profit_all_percent = stats['profit_all_percent']
         profit_all_fiat = stats['profit_all_fiat']
         trade_count = stats['trade_count']
-        first_trade_date = stats['first_trade_date']
-        latest_trade_date = stats['latest_trade_date']
+        first_trade_date = f"{stats['first_trade_humanized']} ({stats['first_trade_date']})"
+        latest_trade_date = f"{stats['latest_trade_humanized']} ({stats['latest_trade_date']})"
         avg_duration = stats['avg_duration']
         best_pair = stats['best_pair']
         best_pair_profit_ratio = stats['best_pair_profit_ratio']
@@ -1172,6 +1164,17 @@ class Telegram(RPCHandler):
         :return: None
         """
         msg = self._rpc._rpc_stopentry()
+        await self._send_msg(f"Status: `{msg['status']}`")
+
+    @authorized_only
+    async def _reload_trade_from_exchange(self, update: Update, context: CallbackContext) -> None:
+        """
+        Handler for /reload_trade <tradeid>.
+        """
+        if not context.args or len(context.args) == 0:
+            raise RPCException("Trade-id not set.")
+        trade_id = int(context.args[0])
+        msg = self._rpc._rpc_reload_trade_from_exchange(trade_id)
         await self._send_msg(f"Status: `{msg['status']}`")
 
     @authorized_only
@@ -1404,7 +1407,9 @@ class Telegram(RPCHandler):
     async def _force_exit_action(self, trade_id, price: Optional[float] = None):
         if trade_id != 'cancel':
             try:
-                self._rpc._rpc_force_exit(trade_id, price=price)
+                loop = asyncio.get_running_loop()
+                # Workaround to avoid nested loops
+                await loop.run_in_executor(None, self._rpc._rpc_force_exit, trade_id, price=price)
             except RPCException as e:
                 await self._send_msg(str(e))
 
@@ -1430,7 +1435,11 @@ class Telegram(RPCHandler):
     async def _force_enter_action(self, pair, price: Optional[float], order_side: SignalDirection, stake_amount: Optional[float] = None):
         if pair != 'cancel':
             try:
-                self._rpc._rpc_force_entry(pair, price, order_side=order_side, stake_amount=stake_amount)
+                def _force_enter():
+                    self._rpc._rpc_force_entry(pair, price, order_side=order_side, stake_amount=stake_amount)
+                loop = asyncio.get_running_loop()
+                # Workaround to avoid nested loops
+                await loop.run_in_executor(None, _force_enter)
             except RPCException as e:
                 logger.exception("Forcebuy error!")
                 await self._send_msg(str(e), ParseMode.HTML)
@@ -1520,7 +1529,7 @@ class Telegram(RPCHandler):
             nrecent
         )
         trades_tab = tabulate(
-            [[arrow.get(trade['close_date']).humanize(),
+            [[dt_humanize(trade['close_date']),
                 trade['pair'] + " (#" + str(trade['trade_id']) + ")",
                 f"{(trade['close_profit']):.2%} ({trade['close_profit_abs']})"]
                 for trade in trades['trades']],
@@ -1898,6 +1907,7 @@ class Telegram(RPCHandler):
             "*/fx <trade_id>|all:* `Alias to /forceexit`\n"
             f"{force_enter_text if self._config.get('force_entry_enable', False) else ''}"
             "*/delete <trade_id>:* `Instantly delete the given trade in the database`\n"
+            "*/reload_trade <trade_id>:* `Relade trade from exchange Orders`\n"
             "*/cancel_open_order <trade_id>:* `Cancels open orders for trade. "
             "Only valid when the trade has open orders.`\n"
             "*/coo <trade_id>|all:* `Alias to /cancel_open_order`\n"

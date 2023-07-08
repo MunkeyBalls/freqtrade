@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple, Union
 
-import arrow
 from pandas import DataFrame
 
 from freqtrade.constants import CUSTOM_TAG_MAX_LENGTH, Config, IntOrInf, ListPairsWithTimeframes
@@ -23,6 +22,7 @@ from freqtrade.strategy.informative_decorator import (InformativeData, PopulateI
                                                       _create_and_merge_informative_pair,
                                                       _format_pair_name)
 from freqtrade.strategy.strategy_wrapper import strategy_safe_wrapper
+from freqtrade.util import dt_now
 from freqtrade.wallets import Wallets
 
 
@@ -48,7 +48,7 @@ class IStrategy(ABC, HyperStrategyMixin):
 
     _ft_params_from_file: Dict
     # associated minimal roi
-    minimal_roi: Dict = {"0": 10.0}
+    minimal_roi: Dict = {}
 
     # associated stoploss
     stoploss: float
@@ -168,7 +168,7 @@ class IStrategy(ABC, HyperStrategyMixin):
                 download_all_data_for_training(self.dp, self.config)
         else:
             # Gracious failures if freqAI is disabled but "start" is called.
-            class DummyClass():
+            class DummyClass:
                 def start(self, *args, **kwargs):
                     raise OperationalException(
                         'freqAI is not enabled. '
@@ -938,7 +938,7 @@ class IStrategy(ABC, HyperStrategyMixin):
         pair: str,
         timeframe: str,
         dataframe: DataFrame,
-    ) -> Tuple[Optional[DataFrame], Optional[arrow.Arrow]]:
+    ) -> Tuple[Optional[DataFrame], Optional[datetime]]:
         """
         Calculates current signal based based on the entry order or exit order
         columns of the dataframe.
@@ -954,16 +954,16 @@ class IStrategy(ABC, HyperStrategyMixin):
 
         latest_date = dataframe['date'].max()
         latest = dataframe.loc[dataframe['date'] == latest_date].iloc[-1]
-        # Explicitly convert to arrow object to ensure the below comparison does not fail
-        latest_date = arrow.get(latest_date)
+        # Explicitly convert to datetime object to ensure the below comparison does not fail
+        latest_date = latest_date.to_pydatetime()
 
         # Check if dataframe is out of date
         timeframe_minutes = timeframe_to_minutes(timeframe)
         offset = self.config.get('exchange', {}).get('outdated_offset', 5)
-        if latest_date < (arrow.utcnow().shift(minutes=-(timeframe_minutes * 2 + offset))):
+        if latest_date < (dt_now() - timedelta(minutes=timeframe_minutes * 2 + offset)):
             logger.warning(
                 'Outdated history for pair %s. Last tick is %s minutes old',
-                pair, int((arrow.utcnow() - latest_date).total_seconds() // 60)
+                pair, int((dt_now() - latest_date).total_seconds() // 60)
             )
             return None, None
         return latest, latest_date
@@ -1046,8 +1046,8 @@ class IStrategy(ABC, HyperStrategyMixin):
         timeframe_seconds = timeframe_to_seconds(timeframe)
 
         if self.ignore_expired_candle(
-            latest_date=latest_date.datetime,
-            current_time=datetime.now(timezone.utc),
+            latest_date=latest_date,
+            current_time=dt_now(),
             timeframe_seconds=timeframe_seconds,
             enter=bool(enter_signal)
         ):
@@ -1085,6 +1085,11 @@ class IStrategy(ABC, HyperStrategyMixin):
         exits: List[ExitCheckTuple] = []
         current_rate = rate
         current_profit = trade.calc_profit_ratio(current_rate)
+        current_profit_best = current_profit
+        if low is not None or high is not None:
+            # Set current rate to high for backtesting ROI exits
+            current_rate_best = (low if trade.is_short else high) or rate
+            current_profit_best = trade.calc_profit_ratio(current_rate_best)
 
         trade.adjust_min_max_rates(high or current_rate, low or current_rate)
 
@@ -1093,20 +1098,13 @@ class IStrategy(ABC, HyperStrategyMixin):
                                                 current_profit=current_profit,
                                                 force_stoploss=force_stoploss, low=low, high=high)
 
-        # Set current rate to high for backtesting exits
-        current_rate = (low if trade.is_short else high) or rate
-        current_profit = trade.calc_profit_ratio(current_rate)
-
         # if enter signal and ignore_roi is set, we don't need to evaluate min_roi.
         roi_reached = (not (enter and self.ignore_roi_if_entry_signal)
-                       and self.min_roi_reached(trade=trade, current_profit=current_profit,
+                       and self.min_roi_reached(trade=trade, current_profit=current_profit_best,
                                                 current_time=current_time))
 
         exit_signal = ExitType.NONE
         custom_reason = ''
-        # use provided rate in backtesting, not high/low.
-        current_rate = rate
-        current_profit = trade.calc_profit_ratio(current_rate)
 
         if self.use_exit_signal:
             if exit_ and not enter:
@@ -1276,7 +1274,7 @@ class IStrategy(ABC, HyperStrategyMixin):
         :return: minimal ROI entry value or None if none proper ROI entry was found.
         """
         # Get highest entry in ROI dict where key <= trade-duration
-        roi_list = list(filter(lambda x: x <= trade_dur, self.minimal_roi.keys()))
+        roi_list = [x for x in self.minimal_roi.keys() if x <= trade_dur]
         if not roi_list:
             return None, None
         roi_entry = max(roi_list)
@@ -1313,7 +1311,7 @@ class IStrategy(ABC, HyperStrategyMixin):
             timedout = (order.status == 'open' and order.order_date_utc < timeout_threshold)
             if timedout:
                 return True
-        time_method = (self.check_exit_timeout if order.side == trade.exit_side
+        time_method = (self.check_exit_timeout if order.ft_order_side == trade.exit_side
                        else self.check_entry_timeout)
 
         return strategy_safe_wrapper(time_method,

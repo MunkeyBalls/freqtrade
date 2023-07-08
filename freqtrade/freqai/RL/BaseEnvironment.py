@@ -2,7 +2,7 @@ import logging
 import random
 from abc import abstractmethod
 from enum import Enum
-from typing import Optional, Type, Union
+from typing import List, Optional, Type, Union
 
 import gymnasium as gym
 import numpy as np
@@ -141,6 +141,9 @@ class BaseEnvironment(gym.Env):
         Unique to the environment action count. Must be inherited.
         """
 
+    def action_masks(self) -> List[bool]:
+        return [self._is_valid(action.value) for action in self.actions]
+
     def seed(self, seed: int = 1):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
@@ -180,7 +183,7 @@ class BaseEnvironment(gym.Env):
     def reset_tensorboard_log(self):
         self.tensorboard_metrics = {}
 
-    def reset(self):
+    def reset(self, seed=None):
         """
         Reset is called at the beginning of every episode
         """
@@ -306,6 +309,12 @@ class BaseEnvironment(gym.Env):
         """
         An example reward function. This is the one function that users will likely
         wish to inject their own creativity into.
+
+        Warning!
+        This is function is a showcase of functionality designed to show as many possible
+        environment control features as possible. It is also designed to run quickly
+        on small computers. This is a benchmark, it is *not* for live production.
+
         :param action: int = The action made by the agent for the current candle.
         :return:
         float = the reward to give to the agent for current step (used for optimization
