@@ -1482,7 +1482,8 @@ class RPC:
                 'ID L/S' if nonspot else 'ID',
                 'Pair',
                 'Since',
-                profitcol]
+                profitcol,
+                'Hold']
             if self._config.get('position_adjustment_enable', False):
                 columns.append('# Entries')
             return trades_list, columns, fiat_profit_sum
