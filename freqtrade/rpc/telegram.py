@@ -1893,8 +1893,11 @@ class Telegram(RPCHandler):
                 else:
                     await self._send_msg(f"Removed trade {id} from hold") 
 
-            # Put in it's own method
-            statlist, head = self._rpc._rpc_status_hold()        
+            # Put in it's own method            
+            fiat_currency = self._config.get('fiat_display_currency', '')
+            statlist, head, fiat_profit_sum = self._rpc._rpc_status_table(
+                self._config['stake_currency'], fiat_currency)
+
             max_trades_per_msg = 50
             messages_count = max(int(len(statlist) / max_trades_per_msg + 0.99), 1)
             for i in range(0, messages_count):

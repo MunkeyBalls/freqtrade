@@ -1408,41 +1408,84 @@ class RPC:
 
             columns = ['ID', 'Pair', "Trail", "Curr.", "Profit"]
             return trades_list, columns        
-
-    def _rpc_status_hold(self) -> Tuple[List, List, float]:
-
-        trades = Trade.get_open_trades()
+ 
+    def _rpc_status_hold(self, stake_currency: str,
+                          fiat_display_currency: str) -> Tuple[List, List, float]:
+        trades: List[Trade] = Trade.get_open_trades()
+        nonspot = self._config.get('trading_mode', TradingMode.SPOT) != TradingMode.SPOT
         if not trades:
             raise RPCException('no active trade')
         else:
             trades_list = []
+            fiat_profit_sum = NAN
             for trade in trades:
                 # calculate profit and send message to user
                 try:
                     current_rate = self._freqtrade.exchange.get_rate(
-                        trade.pair, refresh=False, side='exit', is_short=trade.is_short)
+                        trade.pair, side='exit', is_short=trade.is_short, refresh=False)
                 except (PricingError, ExchangeError):
                     current_rate = NAN
-                trade_percent = (100 * trade.calc_profit_ratio(current_rate))
-                profit_str = f'( {trade_percent:.2f}% )'
+                    trade_profit = NAN
+                    profit_str = f'{NAN:.2%}'
+                else:
+                    if trade.nr_of_successful_entries > 0:
+                        trade_profit = trade.calc_profit(current_rate)
+                        profit_str = f'{trade.calc_profit_ratio(current_rate):.2%}'
+                    else:
+                        trade_profit = 0.0
+                        profit_str = f'{0.0:.2f}'
+                direction_str = ('S' if trade.is_short else 'L') if nonspot else ''
+                if self._fiat_converter:
+                    fiat_profit = self._fiat_converter.convert_amount(
+                        trade_profit,
+                        stake_currency,
+                        fiat_display_currency
+                    )
+                    if not isnan(fiat_profit):
+                        profit_str += f" ({fiat_profit:.2f})"
+                        fiat_profit_sum = fiat_profit if isnan(fiat_profit_sum) \
+                            else fiat_profit_sum + fiat_profit
+                open_order = (trade.select_order_by_order_id(
+                    trade.open_order_id) if trade.open_order_id else None)
+
                 if trade.hold_pct is not None:
                     hold_pct = 100 * trade.hold_pct
                 else:
                     hold_pct = 0
                 hold_pct_str = f'{hold_pct:.2f}%'
-                
-                trades_list.append([
-                    trade.id,
-                    trade.pair + ('*' if (trade.open_order_id is not None
-                                        and trade.close_rate_requested is None) else '')
-                            + ('**' if (trade.close_rate_requested is not None) else ''),
-                    shorten_date(dt_humanize(trade.open_date).humanize(only_distance=True)),
-                    hold_pct_str,
-                    profit_str                    
-                ])
 
-            columns = ['ID', 'Pair', 'Since', "Hold", "Profit"]
-            return trades_list, columns
+                detail_trade = [
+                    f'{trade.id} {direction_str}',
+                    trade.pair + ('*' if (open_order
+                                  and open_order.ft_order_side == trade.entry_side) else '')
+                    + ('**' if (open_order and
+                                open_order.ft_order_side == trade.exit_side is not None) else ''),
+                    shorten_date(dt_humanize(trade.open_date, only_distance=True)),
+                    profit_str,
+                    hold_pct_str
+                ]
+                if self._config.get('position_adjustment_enable', False):
+                    max_entry_str = ''
+                    if self._config.get('max_entry_position_adjustment', -1) > 0:
+                        max_entry_str = f"/{self._config['max_entry_position_adjustment'] + 1}"
+                    filled_entries = trade.nr_of_successful_entries
+                    detail_trade.append(f"{filled_entries}{max_entry_str}")
+                
+                
+                
+                trades_list.append(detail_trade)
+            profitcol = "Profit"
+            if self._fiat_converter:
+                profitcol += " (" + fiat_display_currency + ")"
+
+            columns = [
+                'ID L/S' if nonspot else 'ID',
+                'Pair',
+                'Since',
+                profitcol]
+            if self._config.get('position_adjustment_enable', False):
+                columns.append('# Entries')
+            return trades_list, columns, fiat_profit_sum
         
     def _rpc_add_lock(self, pair: Optional[str] = None, minutes: Optional[float] = None, reason: Optional[str] = None) -> Dict[str, Any]:
         """ Adds a lock """
