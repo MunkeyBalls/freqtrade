@@ -1895,7 +1895,7 @@ class Telegram(RPCHandler):
 
             # Put in it's own method            
             fiat_currency = self._config.get('fiat_display_currency', '')
-            statlist, head, fiat_profit_sum = self._rpc._rpc_status_table(
+            statlist, head, fiat_profit_sum = self._rpc._rpc_status_hold(
                 self._config['stake_currency'], fiat_currency)
 
             max_trades_per_msg = 50
