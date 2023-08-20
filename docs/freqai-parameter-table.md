@@ -42,7 +42,6 @@ Mandatory parameters are marked as **Required** and have to be set in one of the
 | `use_SVM_to_remove_outliers` | Train a support vector machine to detect and remove outliers from the training dataset, as well as from incoming data points. See details about how it works [here](freqai-feature-engineering.md#identifying-outliers-using-a-support-vector-machine-svm). <br> **Datatype:** Boolean.
 | `svm_params` | All parameters available in Sklearn's `SGDOneClassSVM()`. See details about some select parameters [here](freqai-feature-engineering.md#identifying-outliers-using-a-support-vector-machine-svm). <br> **Datatype:** Dictionary.
 | `use_DBSCAN_to_remove_outliers` | Cluster data using the DBSCAN algorithm to identify and remove outliers from training and prediction data. See details about how it works [here](freqai-feature-engineering.md#identifying-outliers-with-dbscan). <br> **Datatype:** Boolean. 
-| `inlier_metric_window` | If set, FreqAI adds an `inlier_metric` to the training feature set and set the lookback to be the `inlier_metric_window`, i.e., the number of previous time points to compare the current candle to. Details of how the `inlier_metric` is computed can be found [here](freqai-feature-engineering.md#inlier-metric). <br> **Datatype:** Integer. <br> Default: `0`.
 | `noise_standard_deviation` | If set, FreqAI adds noise to the training features with the aim of preventing overfitting. FreqAI generates random deviates from a gaussian distribution with a standard deviation of `noise_standard_deviation` and adds them to all data points. `noise_standard_deviation` should be kept relative to the normalized space, i.e., between -1 and 1. In other words, since data in FreqAI is always normalized to be between -1 and 1, `noise_standard_deviation: 0.05` would result in 32% of the data being randomly increased/decreased by more than 2.5% (i.e., the percent of data falling within the first standard deviation). <br> **Datatype:** Integer. <br> Default: `0`.
 | `outlier_protection_percentage` | Enable to prevent outlier detection methods from discarding too much data. If more than `outlier_protection_percentage` % of points are detected as outliers by the SVM or DBSCAN, FreqAI will log a warning message and ignore outlier detection, i.e., the original dataset will be kept intact. If the outlier protection is triggered, no predictions will be made based on the training dataset. <br> **Datatype:** Float. <br> Default: `30`.
 | `reverse_train_test_order` | Split the feature dataset (see below) and use the latest data split for training and test on historical split of the data. This allows the model to be trained up to the most recent data point, while avoiding overfitting. However, you should be careful to understand the unorthodox nature of this parameter before employing it. <br> **Datatype:** Boolean. <br> Default: `False` (no reversal).
@@ -101,12 +100,12 @@ Mandatory parameters are marked as **Required** and have to be set in one of the
 
 #### trainer_kwargs
 
-|  Parameter | Description |
-|------------|-------------|
-|  |  **Model training parameters within the `freqai.model_training_parameters.model_kwargs` sub dictionary**
-| `max_iters` | The number of training iterations to run. iteration here refers to the number of times we call self.optimizer.step(). used to calculate n_epochs. <br> **Datatype:** int. <br> Default: `100`.
-| `batch_size` | The size of the batches to use during training.. <br> **Datatype:** int. <br> Default: `64`.
-| `max_n_eval_batches` | The maximum number batches to use for evaluation.. <br> **Datatype:** int, optional. <br> Default: `None`.
+| Parameter    | Description |
+|--------------|-------------|
+|              |  **Model training parameters within the `freqai.model_training_parameters.model_kwargs` sub dictionary**
+| `n_epochs`   | The `n_epochs` parameter is a crucial setting in the PyTorch training loop that determines the number of times the entire training dataset will be used to update the model's parameters. An epoch represents one full pass through the entire training dataset. Overrides `n_steps`. Either `n_epochs` or `n_steps` must be set. <br><br> **Datatype:** int. optional. <br> Default: `10`.
+| `n_steps`    | An alternative way of setting `n_epochs` -  the number of training iterations to run. Iteration here refer to the number of times we call `optimizer.step()`. Ignored if `n_epochs` is set. A simplified version of the function: <br><br> n_epochs = n_steps / (n_obs / batch_size) <br><br> The motivation here is that `n_steps` is easier to optimize and keep stable across different n_obs - the number of data points.  <br> <br> **Datatype:** int. optional. <br> Default: `None`.
+| `batch_size` | The size of the batches to use during training. <br><br> **Datatype:** int. <br> Default: `64`.
 
 
 ### Additional parameters

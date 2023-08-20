@@ -116,6 +116,13 @@ def file_load_json(file: Path):
     return pairdata
 
 
+def is_file_in_dir(file: Path, directory: Path) -> bool:
+    """
+    Helper function to check if file is in directory.
+    """
+    return file.is_file() and file.parent.samefile(directory)
+
+
 def pair_to_filename(pair: str) -> str:
     for ch in ['/', ' ', '.', '@', '$', '+', ':']:
         pair = pair.replace(ch, '_')
@@ -183,30 +190,6 @@ def safe_value_fallback2(dict1: dictMap, dict2: dictMap, key1: str, key2: str, d
 
 def plural(num: float, singular: str, plural: Optional[str] = None) -> str:
     return singular if (num == 1 or num == -1) else plural or singular + 's'
-
-
-def render_template(templatefile: str, arguments: dict = {}) -> str:
-
-    from jinja2 import Environment, PackageLoader, select_autoescape
-
-    env = Environment(
-        loader=PackageLoader('freqtrade', 'templates'),
-        autoescape=select_autoescape(['html', 'xml'])
-    )
-    template = env.get_template(templatefile)
-    return template.render(**arguments)
-
-
-def render_template_with_fallback(templatefile: str, templatefallbackfile: str,
-                                  arguments: dict = {}) -> str:
-    """
-    Use templatefile if possible, otherwise fall back to templatefallbackfile
-    """
-    from jinja2.exceptions import TemplateNotFound
-    try:
-        return render_template(templatefile, arguments)
-    except TemplateNotFound:
-        return render_template(templatefallbackfile, arguments)
 
 
 def chunks(lst: List[Any], n: int) -> Iterator[List[Any]]:

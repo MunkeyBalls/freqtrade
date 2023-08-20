@@ -5,11 +5,12 @@ from typing import Any, Dict, List
 
 from questionary import Separator, prompt
 
+from freqtrade.configuration.detect_environment import running_in_docker
 from freqtrade.configuration.directory_operations import chown_user_directory
 from freqtrade.constants import UNLIMITED_STAKE_AMOUNT
 from freqtrade.exceptions import OperationalException
 from freqtrade.exchange import MAP_EXCHANGE_CHILDCLASS, available_exchanges
-from freqtrade.misc import render_template
+from freqtrade.util import render_template
 
 
 logger = logging.getLogger(__name__)
@@ -104,7 +105,7 @@ def ask_user_config() -> Dict[str, Any]:
             "type": "select",
             "name": "exchange_name",
             "message": "Select exchange",
-            "choices": lambda x: [
+            "choices": [
                 "binance",
                 "binanceus",
                 "bittrex",
@@ -179,7 +180,7 @@ def ask_user_config() -> Dict[str, Any]:
             "name": "api_server_listen_addr",
             "message": ("Insert Api server Listen Address (0.0.0.0 for docker, "
                         "otherwise best left untouched)"),
-            "default": "127.0.0.1",
+            "default": "127.0.0.1" if not running_in_docker() else "0.0.0.0",
             "when": lambda x: x['api_server']
         },
         {

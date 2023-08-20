@@ -381,7 +381,7 @@ class IStrategy(ABC, HyperStrategyMixin):
 
         For full documentation please go to https://www.freqtrade.io/en/latest/strategy-advanced/
 
-        When not implemented by a strategy, returns the initial stoploss value
+        When not implemented by a strategy, returns the initial stoploss value.
         Only called when use_custom_stoploss is set to True.
 
         :param pair: Pair that's currently analyzed
@@ -825,6 +825,7 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         Parses the given candle (OHLCV) data and returns a populated DataFrame
         add several TA indicators and entry order signal to it
+        Should only be used in live.
         :param dataframe: Dataframe containing data from exchange
         :param metadata: Metadata dictionary with additional data (e.g. 'pair')
         :return: DataFrame of candle (OHLCV) data with indicator data and signals added
@@ -1180,7 +1181,8 @@ class IStrategy(ABC, HyperStrategyMixin):
         bound = (low if trade.is_short else high)
         bound_profit = current_profit if not bound else trade.calc_profit_ratio(bound)
         if self.use_custom_stoploss and dir_correct:
-            stop_loss_value = strategy_safe_wrapper(self.custom_stoploss, default_retval=None
+            stop_loss_value = strategy_safe_wrapper(self.custom_stoploss, default_retval=None,
+                                                    supress_error=True
                                                     )(pair=trade.pair, trade=trade,
                                                       current_time=current_time,
                                                       current_rate=(bound or current_rate),
@@ -1331,6 +1333,20 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         return {pair: self.advise_indicators(pair_data.copy(), {'pair': pair}).copy()
                 for pair, pair_data in data.items()}
+
+    def ft_advise_signals(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        """
+        Call advise_entry and advise_exit and return the resulting dataframe.
+        :param dataframe: Dataframe containing data from exchange, as well as pre-calculated
+                          indicators
+        :param metadata: Metadata dictionary with additional data (e.g. 'pair')
+        :return: DataFrame of candle (OHLCV) data with indicator data and signals added
+
+        """
+
+        dataframe = self.advise_entry(dataframe, metadata)
+        dataframe = self.advise_exit(dataframe, metadata)
+        return dataframe
 
     def advise_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         """

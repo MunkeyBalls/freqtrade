@@ -8,9 +8,8 @@ import pandas as pd
 import pytest
 
 from freqtrade.misc import (dataframe_to_json, decimals_per_coin, deep_merge_dicts, file_dump_json,
-                            file_load_json, json_to_dataframe, pair_to_filename,
-                            parse_db_uri_for_logging, plural, render_template,
-                            render_template_with_fallback, round_coin_value, safe_value_fallback,
+                            file_load_json, is_file_in_dir, json_to_dataframe, pair_to_filename,
+                            parse_db_uri_for_logging, plural, round_coin_value, safe_value_fallback,
                             safe_value_fallback2)
 
 
@@ -62,6 +61,24 @@ def test_file_load_json(mocker, testdatadir) -> None:
     # 8 .json is empty and will fail if it's loaded. .json.gz is a copy of 1.json
     ret = file_load_json(testdatadir / 'UNITTEST_BTC-8m.json')
     assert ret
+
+
+def test_is_file_in_dir(tmp_path):
+
+    # Create a temporary directory and file
+    dir_path = tmp_path / "subdir"
+    dir_path.mkdir()
+    file_path = dir_path / "test.txt"
+    file_path.touch()
+
+    # Test that the function returns True when the file is in the directory
+    assert is_file_in_dir(file_path, dir_path) is True
+
+    # Test that the function returns False when the file is not in the directory
+    assert is_file_in_dir(file_path, tmp_path) is False
+
+    file_path2 = tmp_path / "../../test2.txt"
+    assert is_file_in_dir(file_path2, tmp_path) is False
 
 
 @pytest.mark.parametrize("pair,expected_result", [
@@ -157,20 +174,6 @@ def test_plural() -> None:
     assert plural(1.5, "ox", "oxen") == "oxen"
     assert plural(-0.5, "ox", "oxen") == "oxen"
     assert plural(-1.5, "ox", "oxen") == "oxen"
-
-
-def test_render_template_fallback(mocker):
-    from jinja2.exceptions import TemplateNotFound
-    with pytest.raises(TemplateNotFound):
-        val = render_template(
-            templatefile='subtemplates/indicators_does-not-exist.j2',)
-
-    val = render_template_with_fallback(
-        templatefile='strategy_subtemplates/indicators_does-not-exist.j2',
-        templatefallbackfile='strategy_subtemplates/indicators_minimal.j2',
-    )
-    assert isinstance(val, str)
-    assert 'if self.dp' in val
 
 
 @pytest.mark.parametrize('conn_url,expected', [

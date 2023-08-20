@@ -38,6 +38,7 @@ class Order(ModelBase):
     Mirrors CCXT Order structure
     """
     __tablename__ = 'orders'
+    __allow_unmapped__ = True
     session: ClassVar[SessionType]
 
     # Uniqueness should be ensured over pair, order_id
@@ -47,7 +48,8 @@ class Order(ModelBase):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ft_trade_id: Mapped[int] = mapped_column(Integer, ForeignKey('trades.id'), index=True)
 
-    trade: Mapped[List["Trade"]] = relationship("Trade", back_populates="orders")
+    _trade_live: Mapped["Trade"] = relationship("Trade", back_populates="orders", lazy="immediate")
+    _trade_bt: "LocalTrade" = None  # type: ignore
 
     # order_side can only be 'buy', 'sell' or 'stoploss'
     ft_order_side: Mapped[str] = mapped_column(String(25), nullable=False)
@@ -119,11 +121,20 @@ class Order(ModelBase):
     def safe_amount_after_fee(self) -> float:
         return self.safe_filled - self.safe_fee_base
 
+    @property
+    def trade(self) -> "LocalTrade":
+        return self._trade_bt or self._trade_live
+
+    @property
+    def stake_amount(self) -> float:
+        """ Amount in stake currency used for this order"""
+        return self.safe_amount * self.safe_price / self.trade.leverage
+
     def __repr__(self):
 
-        return (f"Order(id={self.id}, order_id={self.order_id}, trade_id={self.ft_trade_id}, "
+        return (f"Order(id={self.id}, trade={self.ft_trade_id}, order_id={self.order_id}, "
                 f"side={self.side}, filled={self.safe_filled}, price={self.safe_price}, "
-                f"order_type={self.order_type}, status={self.status},"
+                f"status={self.status}, date={self.order_date:{DATETIME_PRINT_FORMAT}},"
                 f"remaining={self.remaining}, ft_price={self.ft_price}, "
                 f"ft_order_side={self.ft_order_side}")
 
@@ -214,10 +225,11 @@ class Order(ModelBase):
                 'order_type': self.order_type,
                 'price': self.price,
                 'remaining': self.remaining,
+                'ft_fee_base': self.ft_fee_base,
                 'trade_id': self.ft_trade_id,
                 'id': self.id,
                 'price': self.price,
-                'ft_price': self.ft_price
+                'ft_price': self.ft_price,
             })
         return resp
 
@@ -627,11 +639,9 @@ class LocalTrade:
         """
         Method used internally to set self.stop_loss.
         """
-        stop_loss_norm = price_to_precision(stop_loss, self.price_precision, self.precision_mode,
-                                            rounding_mode=ROUND_DOWN if self.is_short else ROUND_UP)
         if not self.stop_loss:
-            self.initial_stop_loss = stop_loss_norm
-        self.stop_loss = stop_loss_norm
+            self.initial_stop_loss = stop_loss
+        self.stop_loss = stop_loss
 
         self.stop_loss_pct = -1 * abs(percent)
 
@@ -655,26 +665,27 @@ class LocalTrade:
         else:
             new_loss = float(current_price * (1 - abs(stoploss / leverage)))
 
+        stop_loss_norm = price_to_precision(new_loss, self.price_precision, self.precision_mode,
+                                            rounding_mode=ROUND_DOWN if self.is_short else ROUND_UP)
         # no stop loss assigned yet
         if self.initial_stop_loss_pct is None or refresh:
-            self.__set_stop_loss(new_loss, stoploss)
+            self.__set_stop_loss(stop_loss_norm, stoploss)
             self.initial_stop_loss = price_to_precision(
-                new_loss, self.price_precision, self.precision_mode,
+                stop_loss_norm, self.price_precision, self.precision_mode,
                 rounding_mode=ROUND_DOWN if self.is_short else ROUND_UP)
             self.initial_stop_loss_pct = -1 * abs(stoploss)
 
         # evaluate if the stop loss needs to be updated
         else:
-
-            higher_stop = new_loss > self.stop_loss
-            lower_stop = new_loss < self.stop_loss
+            higher_stop = stop_loss_norm > self.stop_loss
+            lower_stop = stop_loss_norm < self.stop_loss
 
             # stop losses only walk up, never down!,
             #   ? But adding more to a leveraged trade would create a lower liquidation price,
             #   ? decreasing the minimum stoploss
             if (higher_stop and not self.is_short) or (lower_stop and self.is_short):
                 logger.debug(f"{self.pair} - Adjusting stoploss...")
-                self.__set_stop_loss(new_loss, stoploss)
+                self.__set_stop_loss(stop_loss_norm, stoploss)
             else:
                 logger.debug(f"{self.pair} - Keeping current stoploss...")
 
@@ -759,10 +770,8 @@ class LocalTrade:
         self.open_order_id = None
         self.recalc_trade_from_orders(is_closing=True)
         if show_msg:
-            logger.info(
-                'Marking %s as closed as the trade is fulfilled and found no open orders for it.',
-                self
-            )
+            logger.info(f"Marking {self} as closed as the trade is fulfilled "
+                        "and found no open orders for it.")
 
     def update_fee(self, fee_cost: float, fee_currency: Optional[str], fee_rate: Optional[float],
                    side: str) -> None:
@@ -1200,12 +1209,13 @@ class LocalTrade:
             return LocalTrade.bt_open_open_trade_count
 
     @staticmethod
-    def stoploss_reinitialization(desired_stoploss):
+    def stoploss_reinitialization(desired_stoploss: float):
         """
         Adjust initial Stoploss to desired stoploss for all open trades.
         """
+        trade: Trade
         for trade in Trade.get_open_trades():
-            logger.info("Found open trade: %s", trade)
+            logger.info(f"Found open trade: {trade}")
 
             # skip case if trailing-stop changed the stoploss already.
             if (trade.stop_loss == trade.initial_stop_loss
@@ -1214,7 +1224,7 @@ class LocalTrade:
 
                 logger.info(f"Stoploss for {trade} needs adjustment...")
                 # Force reset of stoploss
-                trade.stop_loss = None
+                trade.stop_loss = 0.0
                 trade.initial_stop_loss_pct = None
                 trade.adjust_stop_loss(trade.open_rate, desired_stoploss)
                 logger.info(f"New stoploss: {trade.stop_loss}.")
@@ -1326,9 +1336,12 @@ class Trade(ModelBase, LocalTrade):
     trail_pct: Mapped[float] = mapped_column(Float(), nullable=True, default=0.0)
 
     def __init__(self, **kwargs):
+        from_json = kwargs.pop('__FROM_JSON', None)
         super().__init__(**kwargs)
-        self.realized_profit = 0
-        self.recalc_open_trade_value()
+        if not from_json:
+            # Skip recalculation when loading from json
+            self.realized_profit = 0
+            self.recalc_open_trade_value()
 
     @validates('enter_tag', 'exit_reason')
     def validate_string_len(self, key, value):
@@ -1682,6 +1695,7 @@ class Trade(ModelBase, LocalTrade):
         import rapidjson
         data = rapidjson.loads(json_str)
         trade = cls(
+            __FROM_JSON=True,
             id=data["trade_id"],
             pair=data["pair"],
             base_currency=data["base_currency"],
@@ -1736,6 +1750,7 @@ class Trade(ModelBase, LocalTrade):
 
             order_obj = Order(
                 amount=order["amount"],
+                ft_amount=order["amount"],
                 ft_order_side=order["ft_order_side"],
                 ft_pair=order["pair"],
                 ft_is_open=order["is_open"],
@@ -1750,6 +1765,7 @@ class Trade(ModelBase, LocalTrade):
                     if order["order_filled_timestamp"] else None),
                 order_type=order["order_type"],
                 price=order["price"],
+                ft_price=order["price"],
                 remaining=order["remaining"],
             )
             trade.orders.append(order_obj)
