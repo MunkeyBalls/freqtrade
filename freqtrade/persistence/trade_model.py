@@ -380,6 +380,9 @@ class LocalTrade:
     # Futures properties
     funding_fees: Optional[float] = None
 
+    hold_pct: Optional[float] = 0.0
+    trail_pct: Optional[float] = 0.0
+
     @property
     def stoploss_or_liquidation(self) -> float:
         if self.liquidation_price:
@@ -581,6 +584,8 @@ class LocalTrade:
             'price_precision': self.price_precision,
             'precision_mode': self.precision_mode,
             'orders': orders,
+            'hold_pct': self.hold_pct,
+            'trail_pct': self.trail_pct,
         }
 
     @staticmethod
@@ -1308,6 +1313,9 @@ class Trade(ModelBase, LocalTrade):
     # Futures properties
     funding_fees: Mapped[Optional[float]] = mapped_column(
         Float(), nullable=True, default=None)  # type: ignore
+
+    hold_pct: Mapped[float] = mapped_column(Float(), nullable=True, default=0.0)
+    trail_pct: Mapped[float] = mapped_column(Float(), nullable=True, default=0.0)
 
     def __init__(self, **kwargs):
         from_json = kwargs.pop('__FROM_JSON', None)

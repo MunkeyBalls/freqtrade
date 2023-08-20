@@ -891,6 +891,18 @@ class RPC:
             # gen stake amount
             stake_amount = self._freqtrade.wallets.get_trade_stake_amount(pair)
 
+        # Safety check limit price above current rate
+        if price is not None and price != 0:
+            proposed_enter_rate = self._freqtrade.exchange.get_rate(pair, refresh=True, side='entry', is_short=is_short)
+            try:                
+                diff_pct = ((price - proposed_enter_rate) / proposed_enter_rate) * 100.0
+                allowed_diff_pct = self._freqtrade.config.get('limit_buy_safety_pct', 0.01) * 100
+                if diff_pct > allowed_diff_pct:
+                    diff_pct_str = f'{diff_pct:.2f}%'
+                    raise RPCException(f'Request price {price} is {diff_pct_str} higher than current market price {proposed_enter_rate}. Aborted sell.')
+            except ZeroDivisionError:
+                raise RPCException(f'Division by zero')    
+
         # execute buy
         if not order_type:
             order_type = self._freqtrade.strategy.order_types.get(
@@ -1322,3 +1334,128 @@ class RPC:
 
     def _get_market_direction(self) -> MarketDirection:
         return self._freqtrade.strategy.market_direction
+
+
+    def _rpc_update_trail(self, id: str, pct: float) -> Tuple[str, float]:
+            trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
+            trade = Trade.get_trades(trade_filter).first() 
+
+            if not trade:
+                logger.warning('update_trail: Invalid id argument received')
+                raise RPCException(f"Pair not found")
+            if pct <= -1:
+                logger.warning('update_trail: Invalid percentage argument received')
+                raise RPCException(f"Trail percentage needs to be greater than -100%")
+            else:
+                self._freqtrade.update_trail(id, pct)
+        
+            return [trade.id, pct]            
+
+    def _rpc_update_hold(self, id: str, pct: float) -> Tuple[str, float]:
+        trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
+        trade = Trade.get_trades(trade_filter).first() 
+
+        if not trade:
+            logger.warning('update_hold: Invalid id argument received')
+            raise RPCException(f"Pair not found")
+        if pct <= -1:
+            logger.warning('update_hold: Invalid percentage argument received')
+            raise RPCException(f"Hold percentage needs to be greater than -100%")
+        else:
+            self._freqtrade.update_hold(id, pct)
+    
+        return [trade.id, pct]
+
+    def _rpc_status_trail(self) -> Tuple[List, List, float]:
+    
+        trades = Trade.get_open_trades()
+        if not trades:
+            raise RPCException('no active trade')
+        else:
+            trades_list = []
+            for trade in trades:
+                # calculate profit and send message to user
+                try:
+                    current_rate = self._freqtrade.exchange.get_rate(
+                        trade.pair, refresh=False, side='exit', is_short=trade.is_short)
+                except (PricingError, ExchangeError):
+                    current_rate = NAN
+                trade_percent = (100 * trade.calc_profit_ratio(current_rate))
+                profit_str = f'{trade_percent:.2f}%'
+                if trade.trail_pct is not None: 
+                    trail_pct = 100 * trade.trail_pct
+                else:
+                    trail_pct = 0.0
+                trail_pct_str = f'{trail_pct:.2f}%'
+
+                if trade.stop_loss is not None:
+                    stoploss_current_dist = trade.stop_loss - current_rate
+                    stoploss_current_dist_ratio = 100 * (stoploss_current_dist / current_rate)
+                else:
+                    stoploss_current_dist_ratio = 0
+
+                stoploss_current_dist_ratio_str = f'{stoploss_current_dist_ratio:.2f}%'
+                
+                trades_list.append([
+                    trade.id,
+                    trade.pair + ('*' if (trade.open_order_id is not None
+                                        and trade.close_rate_requested is None) else '')
+                            + ('**' if (trade.close_rate_requested is not None) else ''),
+                    trail_pct_str,
+                    stoploss_current_dist_ratio_str,
+                    profit_str                    
+                ])
+
+            columns = ['ID', 'Pair', "Trail", "Curr.", "Profit"]
+            return trades_list, columns        
+
+    def _rpc_status_hold(self) -> Tuple[List, List, float]:
+
+        trades = Trade.get_open_trades()
+        if not trades:
+            raise RPCException('no active trade')
+        else:
+            trades_list = []
+            for trade in trades:
+                # calculate profit and send message to user
+                try:
+                    current_rate = self._freqtrade.exchange.get_rate(
+                        trade.pair, refresh=False, side='exit', is_short=trade.is_short)
+                except (PricingError, ExchangeError):
+                    current_rate = NAN
+                trade_percent = (100 * trade.calc_profit_ratio(current_rate))
+                profit_str = f'( {trade_percent:.2f}% )'
+                if trade.hold_pct is not None:
+                    hold_pct = 100 * trade.hold_pct
+                else:
+                    hold_pct = 0
+                hold_pct_str = f'{hold_pct:.2f}%'
+                
+                trades_list.append([
+                    trade.id,
+                    trade.pair + ('*' if (trade.open_order_id is not None
+                                        and trade.close_rate_requested is None) else '')
+                            + ('**' if (trade.close_rate_requested is not None) else ''),
+                    shorten_date(arrow.get(trade.open_date).humanize(only_distance=True)),
+                    hold_pct_str,
+                    profit_str                    
+                ])
+
+            columns = ['ID', 'Pair', 'Since', "Hold", "Profit"]
+            return trades_list, columns
+        
+    def _rpc_add_lock(self, pair: Optional[str] = None, minutes: Optional[float] = None, reason: Optional[str] = None) -> Dict[str, Any]:
+        """ Adds a lock """
+
+        if not minutes:
+            minutes = 30
+
+        if not reason:
+            reason = 'AddLock'
+
+        until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+
+        if pair:
+            PairLocks.lock_pair(pair, until, reason)
+
+        return self._rpc_locks()        
