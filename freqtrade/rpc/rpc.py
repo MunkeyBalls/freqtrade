@@ -1436,7 +1436,7 @@ class RPC:
                     trade.pair + ('*' if (trade.open_order_id is not None
                                         and trade.close_rate_requested is None) else '')
                             + ('**' if (trade.close_rate_requested is not None) else ''),
-                    shorten_date(arrow.get(trade.open_date).humanize(only_distance=True)),
+                    shorten_date(dt_humanize(trade.open_date).humanize(only_distance=True)),
                     hold_pct_str,
                     profit_str                    
                 ])
