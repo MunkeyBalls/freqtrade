@@ -1768,6 +1768,7 @@ class FreqtradeBot(LoggingMixin):
             'fiat_currency': self.config.get('fiat_display_currency'),
             'sub_trade': sub_trade,
             'cumulative_profit': trade.realized_profit,
+            'version': self.strategy.version(),
         }
 
         # Send the message
