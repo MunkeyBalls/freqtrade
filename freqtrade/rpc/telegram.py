@@ -478,6 +478,11 @@ class Telegram(RPCHandler):
             message = f"{msg['status']}"
         elif msg_type == RPCMessageType.STRATEGY_MSG:
             message = f"{msg['msg']}"
+
+        elif msg_type == RPCMessageType.EXIT_HOLD:            
+            msg['current_profit_ratio'] = round(msg['current_profit_ratio'] * 100, 2)
+            message = '\N{WARNING SIGN} *Exit hold:* {trade_id} - `{pair}` - `{exit_reason}` at rate {rate} ({current_profit_ratio:.2f}%)'.format(**msg)
+
         else:
             logger.debug("Unknown message type: %s", msg_type)
             return None
