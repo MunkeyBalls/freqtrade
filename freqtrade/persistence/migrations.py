@@ -337,7 +337,7 @@ def check_migrate(engine, decl_base, previous_tables) -> None:
     # or not has_column(cols_orders, 'funding_fee')):
     migrating = False
     # if not has_column(cols_orders, 'ft_cancel_reason'):
-    if not has_column(cols_trades, 'funding_fee_running') or not has_column(cols_trades, 'hold_pct')::
+    if not has_column(cols_trades, 'funding_fee_running') or not has_column(cols_trades, 'hold_pct'):
         migrating = True
         logger.info(f"Running database migration for trades - "
                     f"backup: {table_back_name}, {order_table_bak_name}")
