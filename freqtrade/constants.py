@@ -33,13 +33,12 @@ HYPEROPT_LOSS_BUILTIN = ['ShortTradeDurHyperOptLoss', 'OnlyProfitHyperOptLoss',
                          'MaxDrawDownHyperOptLoss', 'MaxDrawDownRelativeHyperOptLoss',
                          'ProfitDrawDownHyperOptLoss']
 AVAILABLE_PAIRLISTS = ['StaticPairList', 'VolumePairList', 'ProducerPairList', 'RemotePairList',
-                       'AgeFilter', 'OffsetFilter', 'PerformanceFilter',
+                       'AgeFilter', "FullTradesFilter", 'OffsetFilter', 'PerformanceFilter',
                        'PrecisionFilter', 'PriceFilter', 'RangeStabilityFilter',
                        'ShuffleFilter', 'SpreadFilter', 'VolatilityFilter']
 AVAILABLE_PROTECTIONS = ['CooldownPeriod',
                          'LowProfitPairs', 'MaxDrawdown', 'StoplossGuard']
-AVAILABLE_DATAHANDLERS_TRADES = ['json', 'jsongz', 'hdf5', 'feather']
-AVAILABLE_DATAHANDLERS = AVAILABLE_DATAHANDLERS_TRADES + ['parquet']
+AVAILABLE_DATAHANDLERS = ['json', 'jsongz', 'hdf5', 'feather', 'parquet']
 BACKTEST_BREAKDOWNS = ['day', 'week', 'month']
 BACKTEST_CACHE_AGE = ['none', 'day', 'week', 'month']
 BACKTEST_CACHE_DEFAULT = 'day'
@@ -50,6 +49,15 @@ DEFAULT_DATAFRAME_COLUMNS = ['date', 'open', 'high', 'low', 'close', 'volume']
 # Don't modify sequence of DEFAULT_TRADES_COLUMNS
 # it has wide consequences for stored trades files
 DEFAULT_TRADES_COLUMNS = ['timestamp', 'id', 'type', 'side', 'price', 'amount', 'cost']
+TRADES_DTYPES = {
+    'timestamp': 'int64',
+    'id': 'str',
+    'type': 'str',
+    'side': 'str',
+    'price': 'float64',
+    'amount': 'float64',
+    'cost': 'float64',
+}
 TRADING_MODES = ['spot', 'margin', 'futures']
 MARGIN_MODES = ['cross', 'isolated', '']
 
@@ -69,7 +77,8 @@ DL_DATA_TIMEFRAMES = ['1m', '5m']
 
 ENV_VAR_PREFIX = 'FREQTRADE__'
 
-NON_OPEN_EXCHANGE_STATES = ('cancelled', 'canceled', 'closed', 'expired')
+CANCELED_EXCHANGE_STATES = ('cancelled', 'canceled', 'expired')
+NON_OPEN_EXCHANGE_STATES = CANCELED_EXCHANGE_STATES + ('closed',)
 
 # Define decimals per coin for outputs
 # Only used for outputs.
@@ -153,7 +162,7 @@ CONF_SCHEMA = {
             },
         },
         'amount_reserve_percent': {'type': 'number', 'minimum': 0.0, 'maximum': 0.5},
-        'stoploss': {'type': 'number', 'maximum': 0, 'exclusiveMaximum': True, 'minimum': -1},
+        'stoploss': {'type': 'number', 'maximum': 0, 'exclusiveMaximum': True},
         'trailing_stop': {'type': 'boolean'},
         'trailing_stop_positive': {'type': 'number', 'minimum': 0, 'maximum': 1},
         'trailing_stop_positive_offset': {'type': 'number', 'minimum': 0, 'maximum': 1},
@@ -172,6 +181,11 @@ CONF_SCHEMA = {
         'minimum_trade_amount': {'type': 'number', 'default': 10},
         'targeted_trade_amount': {'type': 'number', 'default': 20},
         'lookahead_analysis_exportfilename': {'type': 'string'},
+        'startup_candle': {
+            'type': 'array',
+            'uniqueItems': True,
+            'default': [199, 399, 499, 999, 1999],
+        },
         'liquidation_buffer': {'type': 'number', 'minimum': 0.0, 'maximum': 0.99},
         'backtest_breakdown': {
             'type': 'array',
@@ -449,12 +463,12 @@ CONF_SCHEMA = {
         'dataformat_ohlcv': {
             'type': 'string',
             'enum': AVAILABLE_DATAHANDLERS,
-            'default': 'json'
+            'default': 'feather'
         },
         'dataformat_trades': {
             'type': 'string',
-            'enum': AVAILABLE_DATAHANDLERS_TRADES,
-            'default': 'jsongz'
+            'enum': AVAILABLE_DATAHANDLERS,
+            'default': 'feather'
         },
         'position_adjustment_enable': {'type': 'boolean'},
         'max_entry_position_adjustment': {'type': ['integer', 'number'], 'minimum': -1},
@@ -464,7 +478,6 @@ CONF_SCHEMA = {
             'type': 'object',
             'properties': {
                 'name': {'type': 'string'},
-                'sandbox': {'type': 'boolean', 'default': False},
                 'key': {'type': 'string', 'default': ''},
                 'secret': {'type': 'string', 'default': ''},
                 'password': {'type': 'string', 'default': ''},
@@ -671,6 +684,9 @@ SCHEMA_MINIMAL_REQUIRED = [
     'dataformat_ohlcv',
     'dataformat_trades',
 ]
+SCHEMA_MINIMAL_WEBSERVER = SCHEMA_MINIMAL_REQUIRED + [
+    'api_server',
+]
 
 CANCEL_REASON = {
     "TIMEOUT": "cancelled due to timeout",
@@ -681,6 +697,7 @@ CANCEL_REASON = {
     "CANCELLED_ON_EXCHANGE": "cancelled on exchange",
     "FORCE_EXIT": "forcesold",
     "REPLACE": "cancelled to be replaced by new limit order",
+    "REPLACE_FAILED": "failed to replace order, deleting Trade",
     "USER_CANCEL": "user requested order cancel"
 }
 
@@ -702,3 +719,6 @@ Config = Dict[str, Any]
 # Exchange part of the configuration.
 ExchangeConfig = Dict[str, Any]
 IntOrInf = float
+
+
+EntryExecuteMode = Literal['initial', 'pos_adjust', 'replace']

@@ -74,7 +74,6 @@ Mandatory parameters are marked as **Required** and have to be set in one of the
 |  |  **Reinforcement Learning Parameters within the `freqai.rl_config` sub dictionary**
 | `rl_config` | A dictionary containing the control parameters for a Reinforcement Learning model. <br> **Datatype:** Dictionary.
 | `train_cycles` | Training time steps will be set based on the `train_cycles * number of training data points. <br> **Datatype:** Integer.
-| `cpu_count` | Number of processors to dedicate to the Reinforcement Learning training process. <br> **Datatype:** int.
 | `max_trade_duration_candles`| Guides the agent training to keep trades below desired length. Example usage shown in `prediction_models/ReinforcementLearner.py` within the customizable `calculate_reward()` function. <br> **Datatype:** int.
 | `model_type` | Model string from stable_baselines3 or SBcontrib. Available strings include: `'TRPO', 'ARS', 'RecurrentPPO', 'MaskablePPO', 'PPO', 'A2C', 'DQN'`. User should ensure that `model_training_parameters` match those available to the corresponding stable_baselines3 model by visiting their documentaiton. [PPO doc](https://stable-baselines3.readthedocs.io/en/master/modules/ppo.html) (external website) <br> **Datatype:** string.
 | `policy_type` | One of the available policy types from stable_baselines3 <br> **Datatype:** string.
@@ -100,12 +99,12 @@ Mandatory parameters are marked as **Required** and have to be set in one of the
 
 #### trainer_kwargs
 
-|  Parameter | Description |
-|------------|-------------|
-|  |  **Model training parameters within the `freqai.model_training_parameters.model_kwargs` sub dictionary**
-| `max_iters` | The number of training iterations to run. iteration here refers to the number of times we call self.optimizer.step(). used to calculate n_epochs. <br> **Datatype:** int. <br> Default: `100`.
-| `batch_size` | The size of the batches to use during training.. <br> **Datatype:** int. <br> Default: `64`.
-| `max_n_eval_batches` | The maximum number batches to use for evaluation.. <br> **Datatype:** int, optional. <br> Default: `None`.
+| Parameter    | Description |
+|--------------|-------------|
+|              |  **Model training parameters within the `freqai.model_training_parameters.model_kwargs` sub dictionary**
+| `n_epochs`   | The `n_epochs` parameter is a crucial setting in the PyTorch training loop that determines the number of times the entire training dataset will be used to update the model's parameters. An epoch represents one full pass through the entire training dataset. Overrides `n_steps`. Either `n_epochs` or `n_steps` must be set. <br><br> **Datatype:** int. optional. <br> Default: `10`.
+| `n_steps`    | An alternative way of setting `n_epochs` -  the number of training iterations to run. Iteration here refer to the number of times we call `optimizer.step()`. Ignored if `n_epochs` is set. A simplified version of the function: <br><br> n_epochs = n_steps / (n_obs / batch_size) <br><br> The motivation here is that `n_steps` is easier to optimize and keep stable across different n_obs - the number of data points.  <br> <br> **Datatype:** int. optional. <br> Default: `None`.
+| `batch_size` | The size of the batches to use during training. <br><br> **Datatype:** int. <br> Default: `64`.
 
 
 ### Additional parameters

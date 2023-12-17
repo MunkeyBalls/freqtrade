@@ -21,6 +21,8 @@ class Binance(Exchange):
 
     _ft_has: Dict = {
         "stoploss_on_exchange": True,
+        "stop_price_param": "stopPrice",
+        "stop_price_prop": "stopPrice",
         "stoploss_order_types": {"limit": "stop_loss_limit"},
         "order_time_in_force": ["GTC", "FOK", "IOC", "PO"],
         "ohlcv_candle_limit": 1000,
@@ -121,10 +123,14 @@ class Binance(Exchange):
 
     def funding_fee_cutoff(self, open_date: datetime):
         """
+        Funding fees are only charged at full hours (usually every 4-8h).
+        Therefore a trade opening at 10:00:01 will not be charged a funding fee until the next hour.
+        On binance, this cutoff is 15s.
+        https://github.com/freqtrade/freqtrade/pull/5779#discussion_r740175931
         :param open_date: The open date for a trade
-        :return: The cutoff open time for when a funding fee is charged
+        :return: True if the date falls on a full hour, False otherwise
         """
-        return open_date.minute > 0 or (open_date.minute == 0 and open_date.second > 15)
+        return open_date.minute == 0 and open_date.second < 15
 
     def dry_run_liquidation_price(
         self,

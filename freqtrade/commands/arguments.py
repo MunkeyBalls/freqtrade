@@ -65,8 +65,8 @@ ARGS_BUILD_CONFIG = ["config"]
 
 ARGS_BUILD_STRATEGY = ["user_data_dir", "strategy", "template"]
 
+ARGS_CONVERT_DATA_TRADES = ["pairs", "format_from_trades", "format_to", "erase", "exchange"]
 ARGS_CONVERT_DATA = ["pairs", "format_from", "format_to", "erase", "exchange"]
-
 ARGS_CONVERT_DATA_OHLCV = ARGS_CONVERT_DATA + ["timeframes", "trading_mode", "candle_types"]
 
 ARGS_CONVERT_TRADES = ["pairs", "timeframes", "exchange", "dataformat_ohlcv", "dataformat_trades"]
@@ -121,6 +121,8 @@ ARGS_STRATEGY_UPDATER = ["strategy_list", "strategy_path", "recursive_strategy_s
 ARGS_LOOKAHEAD_ANALYSIS = [
     a for a in ARGS_BACKTEST if a not in ("position_stacking", "use_max_market_positions", 'cache')
     ] + ["minimum_trade_amount", "targeted_trade_amount", "lookahead_analysis_exportfilename"]
+
+ARGS_RECURSIVE_ANALYSIS = ["timeframe", "timerange", "dataformat_ohlcv", "pairs", "startup_candle"]
 
 
 class Arguments:
@@ -206,8 +208,9 @@ class Arguments:
                                         start_list_strategies, start_list_timeframes,
                                         start_lookahead_analysis, start_new_config,
                                         start_new_strategy, start_plot_dataframe, start_plot_profit,
-                                        start_show_trades, start_strategy_update,
-                                        start_test_pairlist, start_trading, start_webserver)
+                                        start_recursive_analysis, start_show_trades,
+                                        start_strategy_update, start_test_pairlist, start_trading,
+                                        start_webserver)
 
         subparsers = self.parser.add_subparsers(dest='command',
                                                 # Use custom message when no subhandler is added
@@ -265,7 +268,7 @@ class Arguments:
             parents=[_common_parser],
         )
         convert_trade_data_cmd.set_defaults(func=partial(start_convert_data, ohlcv=False))
-        self._build_args(optionlist=ARGS_CONVERT_DATA, parser=convert_trade_data_cmd)
+        self._build_args(optionlist=ARGS_CONVERT_DATA_TRADES, parser=convert_trade_data_cmd)
 
         # Add trades-to-ohlcv subcommand
         convert_trade_data_cmd = subparsers.add_parser(
@@ -467,3 +470,14 @@ class Arguments:
 
         self._build_args(optionlist=ARGS_LOOKAHEAD_ANALYSIS,
                          parser=lookahead_analayis_cmd)
+
+        # Add recursive_analysis subcommand
+        recursive_analayis_cmd = subparsers.add_parser(
+            'recursive-analysis',
+            help="Check for potential recursive formula issue.",
+            parents=[_common_parser, _strategy_parser])
+
+        recursive_analayis_cmd.set_defaults(func=start_recursive_analysis)
+
+        self._build_args(optionlist=ARGS_RECURSIVE_ANALYSIS,
+                         parser=recursive_analayis_cmd)

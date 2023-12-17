@@ -20,7 +20,7 @@ With the current framework, we aim to expose the training environment via the co
 
 We envision the majority of users focusing their effort on creative design of the `calculate_reward()` function [details here](#creating-a-custom-reward-function), while leaving the rest of the environment untouched. Other users may not touch the environment at all, and they will only play with the configuration settings and the powerful feature engineering that already exists in FreqAI. Meanwhile, we enable advanced users to create their own model classes entirely.
 
-The framework is built on stable_baselines3 (torch) and OpenAI gym for the base environment class. But generally speaking, the model class is well isolated. Thus, the addition of competing libraries can be easily integrated into the existing framework. For the environment, it is inheriting from `gym.env` which means that it is necessary to write an entirely new environment in order to switch to a different library.
+The framework is built on stable_baselines3 (torch) and OpenAI gym for the base environment class. But generally speaking, the model class is well isolated. Thus, the addition of competing libraries can be easily integrated into the existing framework. For the environment, it is inheriting from `gym.Env` which means that it is necessary to write an entirely new environment in order to switch to a different library.
 
 ### Important considerations
 
@@ -173,7 +173,7 @@ class MyCoolRLModel(ReinforcementLearner):
     """
     class MyRLEnv(Base5ActionRLEnv):
         """
-        User made custom environment. This class inherits from BaseEnvironment and gym.env.
+        User made custom environment. This class inherits from BaseEnvironment and gym.Env.
         Users can override any functions from those parent classes. Here is an example
         of a user customized `calculate_reward()` function.
 
@@ -237,11 +237,10 @@ class MyCoolRLModel(ReinforcementLearner):
 Reinforcement Learning models benefit from tracking training metrics. FreqAI has integrated Tensorboard to allow users to track training and evaluation performance across all coins and across all retrainings. Tensorboard is activated via the following command:
 
 ```bash
-cd freqtrade
 tensorboard --logdir user_data/models/unique-id
 ```
 
-where `unique-id` is the `identifier` set in the `freqai` configuration file. This command must be run in a separate shell to view the output in their browser at 127.0.0.1:6006 (6006 is the default port used by Tensorboard).
+where `unique-id` is the `identifier` set in the `freqai` configuration file. This command must be run in a separate shell to view the output in the browser at 127.0.0.1:6006 (6006 is the default port used by Tensorboard).
 
 ![tensorboard](assets/tensorboard.jpg)
 
@@ -254,7 +253,7 @@ FreqAI also provides a built in episodic summary logger called `self.tensorboard
 ```python
     class MyRLEnv(Base5ActionRLEnv):
         """
-        User made custom environment. This class inherits from BaseEnvironment and gym.env.
+        User made custom environment. This class inherits from BaseEnvironment and gym.Env.
         Users can override any functions from those parent classes. Here is an example
         of a user customized `calculate_reward()` function.
         """

@@ -25,13 +25,13 @@ def test_strategy_test_v3(dataframe_1m, fee, is_short, side):
     strategy = StrategyTestV3({})
 
     metadata = {'pair': 'ETH/BTC'}
-    assert type(strategy.minimal_roi) is dict
-    assert type(strategy.stoploss) is float
-    assert type(strategy.timeframe) is str
+    assert isinstance(strategy.minimal_roi, dict)
+    assert isinstance(strategy.stoploss, float)
+    assert isinstance(strategy.timeframe, str)
     indicators = strategy.populate_indicators(dataframe_1m, metadata)
-    assert type(indicators) is DataFrame
-    assert type(strategy.populate_buy_trend(indicators, metadata)) is DataFrame
-    assert type(strategy.populate_sell_trend(indicators, metadata)) is DataFrame
+    assert isinstance(indicators, DataFrame)
+    assert isinstance(strategy.populate_buy_trend(indicators, metadata), DataFrame)
+    assert isinstance(strategy.populate_sell_trend(indicators, metadata), DataFrame)
 
     trade = Trade(
         open_rate=19_000,
@@ -52,4 +52,5 @@ def test_strategy_test_v3(dataframe_1m, fee, is_short, side):
                                        side=side) is True
 
     assert strategy.custom_stoploss(pair='ETH/BTC', trade=trade, current_time=datetime.now(),
-                                    current_rate=20_000, current_profit=0.05) == strategy.stoploss
+                                    current_rate=20_000, current_profit=0.05, after_fill=False
+                                    ) == strategy.stoploss

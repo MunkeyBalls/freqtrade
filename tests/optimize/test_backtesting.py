@@ -20,8 +20,8 @@ from freqtrade.data.dataprovider import DataProvider
 from freqtrade.data.history import get_timerange
 from freqtrade.enums import CandleType, ExitType, RunMode
 from freqtrade.exceptions import DependencyException, OperationalException
-from freqtrade.exchange.exchange import timeframe_to_next_date
-from freqtrade.optimize.backtest_caching import get_strategy_run_id
+from freqtrade.exchange import timeframe_to_next_date, timeframe_to_prev_date
+from freqtrade.optimize.backtest_caching import get_backtest_metadata_filename, get_strategy_run_id
 from freqtrade.optimize.backtesting import Backtesting
 from freqtrade.persistence import LocalTrade, Trade
 from freqtrade.resolvers import StrategyResolver
@@ -665,7 +665,7 @@ def test_backtest__check_trade_exit(default_conf, fee, mocker) -> None:
     ]
 
     # No data available.
-    res = backtesting._check_trade_exit(trade, row_sell)
+    res = backtesting._check_trade_exit(trade, row_sell, row_sell[0].to_pydatetime())
     assert res is not None
     assert res.exit_reason == ExitType.ROI.value
     assert res.close_date_utc == datetime(2020, 1, 1, 5, 0, tzinfo=timezone.utc)
@@ -678,7 +678,7 @@ def test_backtest__check_trade_exit(default_conf, fee, mocker) -> None:
         [], columns=['date', 'open', 'high', 'low', 'close', 'enter_long', 'exit_long',
                      'enter_short', 'exit_short', 'long_tag', 'short_tag', 'exit_tag'])
 
-    res = backtesting._check_trade_exit(trade, row)
+    res = backtesting._check_trade_exit(trade, row, row[0].to_pydatetime())
     assert res is None
 
 
@@ -1006,7 +1006,7 @@ def test_backtest_one_detail_futures_funding_fees(
         assert t.nr_of_successful_entries >= 6
         # Funding fees will vary depending on the number of adjustment orders
         # That number is a lot higher with detail data.
-        assert -20 < t.funding_fees < -0.1
+        assert -1.81 < t.funding_fees < -0.1
 
 
 def test_backtest_timedout_entry_orders(default_conf, fee, mocker, testdatadir) -> None:
@@ -1122,10 +1122,10 @@ def test_backtest_dataprovider_analyzed_df(default_conf, fee, mocker, testdatadi
     processed = backtesting.strategy.advise_all_indicators(data)
     min_date, max_date = get_timerange(processed)
 
-    global count
     count = 0
 
     def tmp_confirm_entry(pair, current_time, **kwargs):
+        nonlocal count
         dp = backtesting.strategy.dp
         df, _ = dp.get_analyzed_dataframe(pair, backtesting.strategy.timeframe)
         current_candle = df.iloc[-1].squeeze()
@@ -1135,8 +1135,13 @@ def test_backtest_dataprovider_analyzed_df(default_conf, fee, mocker, testdatadi
         assert candle_date == current_time
         # These asserts don't properly raise as they are nested,
         # therefore we increment count and assert for that.
-        global count
-        count = count + 1
+        df = dp.get_pair_dataframe(pair, backtesting.strategy.timeframe)
+        prior_time = timeframe_to_prev_date(backtesting.strategy.timeframe,
+                                            candle_date - timedelta(seconds=1))
+        assert prior_time == df.iloc[-1].squeeze()['date']
+        assert df.iloc[-1].squeeze()['date'] < current_time
+
+        count += 1
 
     backtesting.strategy.confirm_trade_entry = tmp_confirm_entry
     backtesting.backtest(
@@ -1354,11 +1359,11 @@ def test_backtest_multi_pair(default_conf, fee, mocker, tres, pair, testdatadir)
 
     # Cached data correctly removed amounts
     offset = 1 if tres == 0 else 0
-    removed_candles = len(data[pair]) - offset - backtesting.strategy.startup_candle_count
+    removed_candles = len(data[pair]) - offset
     assert len(backtesting.dataprovider.get_analyzed_dataframe(pair, '5m')[0]) == removed_candles
     assert len(
         backtesting.dataprovider.get_analyzed_dataframe('NXT/BTC', '5m')[0]
-    ) == len(data['NXT/BTC']) - 1 - backtesting.strategy.startup_candle_count
+    ) == len(data['NXT/BTC']) - 1
 
     backtesting.strategy.max_open_trades = 1
     backtesting.config.update({'max_open_trades': 1})
@@ -1998,3 +2003,40 @@ def test_get_strategy_run_id(default_conf_usdt):
     strategy = StrategyResolver.load_strategy(default_conf_usdt)
     x = get_strategy_run_id(strategy)
     assert isinstance(x, str)
+
+
+def test_get_backtest_metadata_filename():
+    # Test with a file path
+    filename = Path('backtest_results.json')
+    expected = Path('backtest_results.meta.json')
+    assert get_backtest_metadata_filename(filename) == expected
+
+    # Test with a file path with multiple dots in the name
+    filename = Path('/path/to/backtest.results.json')
+    expected = Path('/path/to/backtest.results.meta.json')
+    assert get_backtest_metadata_filename(filename) == expected
+
+    # Test with a file path with no parent directory
+    filename = Path('backtest_results.json')
+    expected = Path('backtest_results.meta.json')
+    assert get_backtest_metadata_filename(filename) == expected
+
+    # Test with a string file path
+    filename = '/path/to/backtest_results.json'
+    expected = Path('/path/to/backtest_results.meta.json')
+    assert get_backtest_metadata_filename(filename) == expected
+
+    # Test with a string file path with no extension
+    filename = '/path/to/backtest_results'
+    expected = Path('/path/to/backtest_results.meta')
+    assert get_backtest_metadata_filename(filename) == expected
+
+    # Test with a string file path with multiple dots in the name
+    filename = '/path/to/backtest.results.json'
+    expected = Path('/path/to/backtest.results.meta.json')
+    assert get_backtest_metadata_filename(filename) == expected
+
+    # Test with a string file path with no parent directory
+    filename = 'backtest_results.json'
+    expected = Path('backtest_results.meta.json')
+    assert get_backtest_metadata_filename(filename) == expected

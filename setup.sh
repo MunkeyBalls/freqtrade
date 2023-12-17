@@ -11,7 +11,7 @@ function check_installed_pip() {
    ${PYTHON} -m pip > /dev/null
    if [ $? -ne 0 ]; then
         echo_block "Installing Pip for ${PYTHON}"
-        curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+        curl https://bootstrap.pypa.io/get-pip.py -s -o get-pip.py
         ${PYTHON} get-pip.py
         rm get-pip.py
    fi
@@ -25,7 +25,7 @@ function check_installed_python() {
         exit 2
     fi
 
-    for v in 11 10 9 8
+    for v in 11 10 9
     do
         PYTHON="python3.${v}"
         which $PYTHON
@@ -36,17 +36,17 @@ function check_installed_python() {
         fi
     done
 
-    echo "No usable python found. Please make sure to have python3.8 or newer installed."
+    echo "No usable python found. Please make sure to have python3.9 or newer installed."
     exit 1
 }
 
 function updateenv() {
-    echo_block "Updating your virtual env"
-    if [ ! -f .env/bin/activate ]; then
+    echo_block "Updating your virtual environment"
+    if [ ! -f .venv/bin/activate ]; then
         echo "Something went wrong, no virtual environment found."
         exit 1
     fi
-    source .env/bin/activate
+    source .venv/bin/activate
     SYS_ARCH=$(uname -m)
     echo "pip install in-progress. Please wait..."
     ${PYTHON} -m pip install --upgrade pip wheel setuptools
@@ -120,7 +120,7 @@ function updateenv() {
 
 # Install tab lib
 function install_talib() {
-    if [ -f /usr/local/lib/libta_lib.a ]; then
+    if [ -f /usr/local/lib/libta_lib.a ] || [ -f /usr/local/lib/libta_lib.so ] || [ -f /usr/lib/libta_lib.so ]; then
         echo "ta-lib already installed, skipping"
         return
     fi
@@ -186,7 +186,14 @@ function install_redhat() {
 # Upgrade the bot
 function update() {
     git pull
+    if [ -f .env/bin/activate  ]; then
+        # Old environment found - updating to new environment.
+        recreate_environments
+    fi
     updateenv
+    echo "Update completed."
+    echo_block "Don't forget to activate your virtual environment with 'source .venv/bin/activate'!"
+
 }
 
 function check_git_changes() {
@@ -197,6 +204,27 @@ function check_git_changes() {
         echo "Changes in git directory"
         return 0
     fi
+}
+
+function recreate_environments() {
+    if [ -d ".env" ]; then
+        # Remove old virtual env
+        echo "- Deleting your previous virtual env"
+        echo "Warning: Your new environment will be at .venv!"
+        rm -rf .env
+    fi
+    if [ -d ".venv" ]; then
+        echo "- Deleting your previous virtual env"
+        rm -rf .venv
+    fi
+
+    echo
+    ${PYTHON} -m venv .venv
+    if [ $? -ne 0 ]; then
+        echo "Could not create virtual environment. Leaving now"
+        exit 1
+    fi
+
 }
 
 # Reset Develop or Stable branch
@@ -225,22 +253,13 @@ function reset() {
     else
         echo "Reset ignored because you are not on 'stable' or 'develop'."
     fi
+    recreate_environments
 
-    if [ -d ".env" ]; then
-        echo "- Deleting your previous virtual env"
-        rm -rf .env
-    fi
-    echo
-    ${PYTHON} -m venv .env
-    if [ $? -ne 0 ]; then
-        echo "Could not create virtual environment. Leaving now"
-        exit 1
-    fi
     updateenv
 }
 
 function config() {
-    echo_block "Please use 'freqtrade new-config -c config.json' to generate a new configuration file."
+    echo_block "Please use 'freqtrade new-config -c user_data/config.json' to generate a new configuration file."
 }
 
 function install() {
@@ -258,7 +277,7 @@ function install() {
         install_redhat
     else
         echo "This script does not support your OS."
-        echo "If you have Python version 3.8 - 3.11, pip, virtualenv, ta-lib you can continue."
+        echo "If you have Python version 3.9 - 3.11, pip, virtualenv, ta-lib you can continue."
         echo "Wait 10 seconds to continue the next install steps or use ctrl+c to interrupt this shell."
         sleep 10
     fi
@@ -266,9 +285,9 @@ function install() {
     reset
     config
     echo_block "Run the bot !"
-    echo "You can now use the bot by executing 'source .env/bin/activate; freqtrade <subcommand>'."
-    echo "You can see the list of available bot sub-commands by executing 'source .env/bin/activate; freqtrade --help'."
-    echo "You verify that freqtrade is installed successfully by running 'source .env/bin/activate; freqtrade --version'."
+    echo "You can now use the bot by executing 'source .venv/bin/activate; freqtrade <subcommand>'."
+    echo "You can see the list of available bot sub-commands by executing 'source .venv/bin/activate; freqtrade --help'."
+    echo "You verify that freqtrade is installed successfully by running 'source .venv/bin/activate; freqtrade --version'."
 }
 
 function plot() {
@@ -285,7 +304,7 @@ function help() {
     echo "	-p,--plot       Install dependencies for Plotting scripts."
 }
 
-# Verify if 3.8+ is installed
+# Verify if 3.9+ is installed
 check_installed_python
 
 case $* in

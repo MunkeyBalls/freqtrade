@@ -421,6 +421,12 @@ AVAILABLE_CLI_OPTIONS = {
              'desired timeframe as specified as --timeframes/-t.',
         action='store_true',
     ),
+    "format_from_trades": Arg(
+        '--format-from',
+        help='Source format for data conversion.',
+        choices=constants.AVAILABLE_DATAHANDLERS + ['kraken_csv'],
+        required=True,
+    ),
     "format_from": Arg(
         '--format-from',
         help='Source format for data conversion.',
@@ -435,13 +441,13 @@ AVAILABLE_CLI_OPTIONS = {
     ),
     "dataformat_ohlcv": Arg(
         '--data-format-ohlcv',
-        help='Storage format for downloaded candle (OHLCV) data. (default: `json`).',
+        help='Storage format for downloaded candle (OHLCV) data. (default: `feather`).',
         choices=constants.AVAILABLE_DATAHANDLERS,
     ),
     "dataformat_trades": Arg(
         '--data-format-trades',
-        help='Storage format for downloaded trades data. (default: `jsongz`).',
-        choices=constants.AVAILABLE_DATAHANDLERS_TRADES,
+        help='Storage format for downloaded trades data. (default: `feather`).',
+        choices=constants.AVAILABLE_DATAHANDLERS,
     ),
     "show_timerange": Arg(
         '--show-timerange',
@@ -704,5 +710,10 @@ AVAILABLE_CLI_OPTIONS = {
         '--lookahead-analysis-exportfilename',
         help="Use this csv-filename to store lookahead-analysis-results",
         type=str
+    ),
+    "startup_candle": Arg(
+        '--startup-candle',
+        help='Specify startup candles to be checked (`199`, `499`, `999`, `1999`).',
+        nargs='+',
     ),
 }

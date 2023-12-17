@@ -550,7 +550,7 @@ def test_start_install_ui(mocker):
     assert download_mock.call_count == 0
 
 
-def test_clean_ui_subdir(mocker, tmpdir, caplog):
+def test_clean_ui_subdir(mocker, tmp_path, caplog):
     mocker.patch("freqtrade.commands.deploy_commands.Path.is_dir",
                  side_effect=[True, True])
     mocker.patch("freqtrade.commands.deploy_commands.Path.is_file",
@@ -560,14 +560,14 @@ def test_clean_ui_subdir(mocker, tmpdir, caplog):
 
     mocker.patch("freqtrade.commands.deploy_commands.Path.glob",
                  return_value=[Path('test1'), Path('test2'), Path('.gitkeep')])
-    folder = Path(tmpdir) / "uitests"
+    folder = tmp_path / "uitests"
     clean_ui_subdir(folder)
     assert log_has("Removing UI directory content.", caplog)
     assert rd_mock.call_count == 1
     assert ul_mock.call_count == 1
 
 
-def test_download_and_install_ui(mocker, tmpdir):
+def test_download_and_install_ui(mocker, tmp_path):
     # Create zipfile
     requests_mock = MagicMock()
     file_like_object = BytesIO()
@@ -583,7 +583,7 @@ def test_download_and_install_ui(mocker, tmpdir):
                  side_effect=[True, False])
     wb_mock = mocker.patch("freqtrade.commands.deploy_commands.Path.write_bytes")
 
-    folder = Path(tmpdir) / "uitests_dl"
+    folder = tmp_path / "uitests_dl"
     folder.mkdir(exist_ok=True)
 
     assert read_ui_version(folder) is None
@@ -1010,8 +1010,8 @@ def test_start_test_pairlist(mocker, caplog, tickers, default_conf, capsys):
         pytest.fail(f'Expected well formed JSON, but failed to parse: {captured.out}')
 
 
-def test_hyperopt_list(mocker, capsys, caplog, saved_hyperopt_results, tmpdir):
-    csv_file = Path(tmpdir) / "test.csv"
+def test_hyperopt_list(mocker, capsys, caplog, saved_hyperopt_results, tmp_path):
+    csv_file = tmp_path / "test.csv"
     mocker.patch(
         'freqtrade.optimize.hyperopt_tools.HyperoptTools._test_hyperopt_results_exist',
         return_value=True
@@ -1389,8 +1389,6 @@ def test_convert_data_trades(mocker, testdatadir):
 def test_start_list_data(testdatadir, capsys):
     args = [
         "list-data",
-        "--data-format-ohlcv",
-        "json",
         "--datadir",
         str(testdatadir),
     ]
@@ -1398,14 +1396,14 @@ def test_start_list_data(testdatadir, capsys):
     pargs['config'] = None
     start_list_data(pargs)
     captured = capsys.readouterr()
-    assert "Found 17 pair / timeframe combinations." in captured.out
+    assert "Found 16 pair / timeframe combinations." in captured.out
     assert "\n|         Pair |       Timeframe |   Type |\n" in captured.out
     assert "\n| UNITTEST/BTC | 1m, 5m, 8m, 30m |   spot |\n" in captured.out
 
     args = [
         "list-data",
         "--data-format-ohlcv",
-        "json",
+        "feather",
         "--pairs", "XRP/ETH",
         "--datadir",
         str(testdatadir),
@@ -1421,8 +1419,6 @@ def test_start_list_data(testdatadir, capsys):
 
     args = [
         "list-data",
-        "--data-format-ohlcv",
-        "json",
         "--trading-mode", "futures",
         "--datadir",
         str(testdatadir),
@@ -1439,8 +1435,6 @@ def test_start_list_data(testdatadir, capsys):
 
     args = [
         "list-data",
-        "--data-format-ohlcv",
-        "json",
         "--pairs", "XRP/ETH",
         "--datadir",
         str(testdatadir),
@@ -1518,10 +1512,10 @@ def test_backtesting_show(mocker, testdatadir, capsys):
     assert "Pairs for Strategy" in out
 
 
-def test_start_convert_db(mocker, fee, tmpdir, caplog):
-    db_src_file = Path(f"{tmpdir}/db.sqlite")
+def test_start_convert_db(fee, tmp_path):
+    db_src_file = tmp_path / "db.sqlite"
     db_from = f"sqlite:///{db_src_file}"
-    db_target_file = Path(f"{tmpdir}/db_target.sqlite")
+    db_target_file = tmp_path / "db_target.sqlite"
     db_to = f"sqlite:///{db_target_file}"
     args = [
         "convert-db",
@@ -1548,13 +1542,13 @@ def test_start_convert_db(mocker, fee, tmpdir, caplog):
     assert db_target_file.is_file()
 
 
-def test_start_strategy_updater(mocker, tmpdir):
+def test_start_strategy_updater(mocker, tmp_path):
     sc_mock = mocker.patch('freqtrade.commands.strategy_utils_commands.start_conversion')
     teststrats = Path(__file__).parent.parent / 'strategy/strats'
     args = [
         "strategy-updater",
         "--userdir",
-        str(tmpdir),
+        str(tmp_path),
         "--strategy-path",
         str(teststrats),
     ]
@@ -1562,13 +1556,13 @@ def test_start_strategy_updater(mocker, tmpdir):
     pargs['config'] = None
     start_strategy_update(pargs)
     # Number of strategies in the test directory
-    assert sc_mock.call_count == 11
+    assert sc_mock.call_count == 12
 
     sc_mock.reset_mock()
     args = [
         "strategy-updater",
         "--userdir",
-        str(tmpdir),
+        str(tmp_path),
         "--strategy-path",
         str(teststrats),
         "--strategy-list",

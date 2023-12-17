@@ -40,7 +40,7 @@ Freqtrade is a free and open source crypto trading bot written in Python. It is 
 Please read the [exchange specific notes](exchanges.md) to learn about eventual, special configurations needed for each exchange.
 
 - [X] [Binance](https://www.binance.com/)
-- [X] [Bittrex](https://bittrex.com/)
+- [X] [Bitmart](https://bitmart.com/)
 - [X] [Gate.io](https://www.gate.io/ref/6266643)
 - [X] [Huobi](http://huobi.com/)
 - [X] [Kraken](https://kraken.com/)
@@ -83,7 +83,7 @@ To run this bot we recommend you a linux cloud instance with a minimum of:
 
 Alternatively
 
-- Python 3.8+
+- Python 3.9+
 - pip (pip3)
 - git
 - TA-Lib

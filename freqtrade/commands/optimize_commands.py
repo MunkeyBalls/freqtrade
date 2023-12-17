@@ -140,7 +140,19 @@ def start_lookahead_analysis(args: Dict[str, Any]) -> None:
     :param args: Cli args from Arguments()
     :return: None
     """
-    from freqtrade.optimize.lookahead_analysis_helpers import LookaheadAnalysisSubFunctions
+    from freqtrade.optimize.analysis.lookahead_helpers import LookaheadAnalysisSubFunctions
 
     config = setup_utils_configuration(args, RunMode.UTIL_NO_EXCHANGE)
     LookaheadAnalysisSubFunctions.start(config)
+
+
+def start_recursive_analysis(args: Dict[str, Any]) -> None:
+    """
+    Start the backtest recursive tester script
+    :param args: Cli args from Arguments()
+    :return: None
+    """
+    from freqtrade.optimize.analysis.recursive_helpers import RecursiveAnalysisSubFunctions
+
+    config = setup_utils_configuration(args, RunMode.UTIL_NO_EXCHANGE)
+    RecursiveAnalysisSubFunctions.start(config)

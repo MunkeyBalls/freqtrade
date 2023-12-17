@@ -21,13 +21,13 @@ def is_mac() -> bool:
 
 
 @pytest.fixture(scope="function")
-def freqai_conf(default_conf, tmpdir):
+def freqai_conf(default_conf, tmp_path):
     freqaiconf = deepcopy(default_conf)
     freqaiconf.update(
         {
             "datadir": Path(default_conf["datadir"]),
             "strategy": "freqai_test_strat",
-            "user_data_dir": Path(tmpdir),
+            "user_data_dir": tmp_path,
             "strategy-path": "freqtrade/tests/strategy/strats",
             "freqaimodel": "LightGBMRegressor",
             "freqaimodel_path": "freqai/prediction_models",
@@ -97,9 +97,9 @@ def mock_pytorch_mlp_model_training_parameters() -> Dict[str, Any]:
     return {
             "learning_rate": 3e-4,
             "trainer_kwargs": {
-                "max_iters": 1,
+                "n_steps": None,
                 "batch_size": 64,
-                "max_n_eval_batches": 1,
+                "n_epochs": 1,
             },
             "model_kwargs": {
                 "hidden_dim": 32,

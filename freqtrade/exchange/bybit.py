@@ -1,16 +1,16 @@
 """ Bybit exchange subclass """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import ccxt
 
 from freqtrade.constants import BuySell
-from freqtrade.enums import MarginMode, PriceType, TradingMode
-from freqtrade.exceptions import DDosProtection, OperationalException, TemporaryError
+from freqtrade.enums import CandleType, MarginMode, PriceType, TradingMode
+from freqtrade.exceptions import DDosProtection, ExchangeError, OperationalException, TemporaryError
 from freqtrade.exchange import Exchange
 from freqtrade.exchange.common import retrier
-from freqtrade.exchange.exchange_utils import timeframe_to_msecs
+from freqtrade.util.datetime_helpers import dt_now, dt_ts
 
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ class Bybit(Exchange):
     """
 
     _ft_has: Dict = {
-        "ohlcv_candle_limit": 200,
+        "ohlcv_candle_limit": 1000,
         "ohlcv_has_history": True,
     }
     _ft_has_futures: Dict = {
@@ -36,6 +36,8 @@ class Bybit(Exchange):
         "funding_fee_timeframe": "8h",
         "stoploss_on_exchange": True,
         "stoploss_order_types": {"limit": "limit", "market": "market"},
+        # bybit response parsing fails to populate stopLossPrice
+        "stop_price_prop": "stopPrice",
         "stop_price_type_field": "triggerBy",
         "stop_price_type_value_mapping": {
             PriceType.LAST: "LastPrice",
@@ -91,28 +93,13 @@ class Bybit(Exchange):
         except ccxt.BaseError as e:
             raise OperationalException(e) from e
 
-    async def _fetch_funding_rate_history(
-        self,
-        pair: str,
-        timeframe: str,
-        limit: int,
-        since_ms: Optional[int] = None,
-    ) -> List[List]:
-        """
-        Fetch funding rate history
-        Necessary workaround until https://github.com/ccxt/ccxt/issues/15990 is fixed.
-        """
-        params = {}
-        if since_ms:
-            until = since_ms + (timeframe_to_msecs(timeframe) * self._ft_has['ohlcv_candle_limit'])
-            params.update({'until': until})
-        # Funding rate
-        data = await self._api_async.fetch_funding_rate_history(
-            pair, since=since_ms,
-            params=params)
-        # Convert funding rate to candle pattern
-        data = [[x['timestamp'], x['fundingRate'], 0, 0, 0, 0] for x in data]
-        return data
+    def ohlcv_candle_limit(
+            self, timeframe: str, candle_type: CandleType, since_ms: Optional[int] = None) -> int:
+
+        if candle_type in (CandleType.FUNDING_RATE):
+            return 200
+
+        return super().ohlcv_candle_limit(timeframe, candle_type, since_ms)
 
     def _lev_prep(self, pair: str, leverage: float, side: BuySell, accept_fail: bool = False):
         if self.trading_mode != TradingMode.SPOT:
@@ -215,6 +202,37 @@ class Bybit(Exchange):
         """
         # Bybit does not provide "applied" funding fees per position.
         if self.trading_mode == TradingMode.FUTURES:
-            return self._fetch_and_calculate_funding_fees(
-                    pair, amount, is_short, open_date)
+            try:
+                return self._fetch_and_calculate_funding_fees(
+                        pair, amount, is_short, open_date)
+            except ExchangeError:
+                logger.warning(f"Could not update funding fees for {pair}.")
         return 0.0
+
+    def fetch_orders(self, pair: str, since: datetime, params: Optional[Dict] = None) -> List[Dict]:
+        """
+        Fetch all orders for a pair "since"
+        :param pair: Pair for the query
+        :param since: Starting time for the query
+        """
+        # On bybit, the distance between since and "until" can't exceed 7 days.
+        # we therefore need to split the query into multiple queries.
+        orders = []
+
+        while since < dt_now():
+            until = since + timedelta(days=7, minutes=-1)
+            orders += super().fetch_orders(pair, since, params={'until': dt_ts(until)})
+            since = until
+
+        return orders
+
+    def fetch_order(self, order_id: str, pair: str, params: Dict = {}) -> Dict:
+        order = super().fetch_order(order_id, pair, params)
+        if (
+            order.get('status') == 'canceled'
+            and order.get('filled') == 0.0
+            and order.get('remaining') == 0.0
+        ):
+            # Canceled orders will have "remaining=0" on bybit.
+            order['remaining'] = None
+        return order

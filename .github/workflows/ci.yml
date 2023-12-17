@@ -25,10 +25,10 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-20.04, ubuntu-22.04 ]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11"]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -90,7 +90,7 @@ jobs:
 
     - name: Backtesting (multi)
       run: |
-        cp config_examples/config_bittrex.example.json config.json
+        cp tests/testdata/config.tests.json config.json
         freqtrade create-userdir --userdir user_data
         freqtrade new-strategy -s AwesomeStrategy
         freqtrade new-strategy -s AwesomeStrategyMin --template minimal
@@ -98,7 +98,7 @@ jobs:
 
     - name: Hyperopt
       run: |
-        cp config_examples/config_bittrex.example.json config.json
+        cp tests/testdata/config.tests.json config.json
         freqtrade create-userdir --userdir user_data
         freqtrade hyperopt --datadir tests/testdata -e 6 --strategy SampleStrategy --hyperopt-loss SharpeHyperOptLossDaily --print-all
 
@@ -108,7 +108,7 @@ jobs:
 
     - name: Run Ruff
       run: |
-        ruff check --format=github .
+        ruff check --output-format=github .
 
     - name: Mypy
       run: |
@@ -127,10 +127,10 @@ jobs:
     strategy:
       matrix:
         os: [ macos-latest ]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11"]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -200,14 +200,14 @@ jobs:
 
     - name: Backtesting
       run: |
-        cp config_examples/config_bittrex.example.json config.json
+        cp tests/testdata/config.tests.json config.json
         freqtrade create-userdir --userdir user_data
         freqtrade new-strategy -s AwesomeStrategyAdv --template advanced
         freqtrade backtesting --datadir tests/testdata --strategy AwesomeStrategyAdv
 
     - name: Hyperopt
       run: |
-        cp config_examples/config_bittrex.example.json config.json
+        cp tests/testdata/config.tests.json config.json
         freqtrade create-userdir --userdir user_data
         freqtrade hyperopt --datadir tests/testdata -e 5 --strategy SampleStrategy --hyperopt-loss SharpeHyperOptLossDaily --print-all
 
@@ -217,7 +217,7 @@ jobs:
 
     - name: Run Ruff
       run: |
-        ruff check --format=github .
+        ruff check --output-format=github .
 
     - name: Mypy
       run: |
@@ -237,10 +237,10 @@ jobs:
     strategy:
       matrix:
         os: [ windows-latest ]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11"]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -275,19 +275,19 @@ jobs:
 
     - name: Backtesting
       run: |
-        cp config_examples/config_bittrex.example.json config.json
+        cp tests/testdata/config.tests.json config.json
         freqtrade create-userdir --userdir user_data
         freqtrade backtesting --datadir tests/testdata --strategy SampleStrategy
 
     - name: Hyperopt
       run: |
-        cp config_examples/config_bittrex.example.json config.json
+        cp tests/testdata/config.tests.json config.json
         freqtrade create-userdir --userdir user_data
         freqtrade hyperopt --datadir tests/testdata -e 5 --strategy SampleStrategy --hyperopt-loss SharpeHyperOptLossDaily --print-all
 
     - name: Run Ruff
       run: |
-        ruff check --format=github .
+        ruff check --output-format=github .
 
     - name: Mypy
       run: |
@@ -304,7 +304,7 @@ jobs:
   mypy_version_check:
     runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -319,7 +319,7 @@ jobs:
   pre-commit:
     runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - uses: actions/setup-python@v4
       with:
@@ -329,7 +329,7 @@ jobs:
   docs_check:
     runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Documentation syntax
       run: |
@@ -359,7 +359,7 @@ jobs:
     # Run pytest with "live" checks
     runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -443,12 +443,12 @@ jobs:
     if: (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'release') && github.repository == 'freqtrade/freqtrade'
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: "3.9"
+        python-version: "3.11"
 
     - name: Extract branch name
       shell: bash
@@ -461,7 +461,7 @@ jobs:
         python setup.py sdist bdist_wheel
 
     - name: Publish to PyPI (Test)
-      uses: pypa/gh-action-pypi-publish@v1.8.8
+      uses: pypa/gh-action-pypi-publish@v1.8.10
       if: (github.event_name == 'release')
       with:
         user: __token__
@@ -469,7 +469,7 @@ jobs:
         repository_url: https://test.pypi.org/legacy/
 
     - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@v1.8.8
+      uses: pypa/gh-action-pypi-publish@v1.8.10
       if: (github.event_name == 'release')
       with:
         user: __token__
@@ -515,7 +515,7 @@ jobs:
     if: (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'release') && github.repository == 'freqtrade/freqtrade'
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Extract branch name
       shell: bash

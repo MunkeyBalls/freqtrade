@@ -8,8 +8,8 @@ import pytest
 from freqtrade.commands.optimize_commands import start_lookahead_analysis
 from freqtrade.data.history import get_timerange
 from freqtrade.exceptions import OperationalException
-from freqtrade.optimize.lookahead_analysis import Analysis, LookaheadAnalysis
-from freqtrade.optimize.lookahead_analysis_helpers import LookaheadAnalysisSubFunctions
+from freqtrade.optimize.analysis.lookahead import Analysis, LookaheadAnalysis
+from freqtrade.optimize.analysis.lookahead_helpers import LookaheadAnalysisSubFunctions
 from tests.conftest import EXMS, get_args, log_has_re, patch_exchange
 
 
@@ -17,6 +17,8 @@ from tests.conftest import EXMS, get_args, log_has_re, patch_exchange
 def lookahead_conf(default_conf_usdt):
     default_conf_usdt['minimum_trade_amount'] = 10
     default_conf_usdt['targeted_trade_amount'] = 20
+    default_conf_usdt['timerange'] = '20220101-20220501'
+
     default_conf_usdt['strategy_path'] = str(
         Path(__file__).parent.parent / "strategy/strats/lookahead_bias")
     default_conf_usdt['strategy'] = 'strategy_test_v3_with_lookahead_bias'
@@ -30,7 +32,7 @@ def test_start_lookahead_analysis(mocker):
     single_mock = MagicMock()
     text_table_mock = MagicMock()
     mocker.patch.multiple(
-        'freqtrade.optimize.lookahead_analysis_helpers.LookaheadAnalysisSubFunctions',
+        'freqtrade.optimize.analysis.lookahead_helpers.LookaheadAnalysisSubFunctions',
         initialize_single_lookahead_analysis=single_mock,
         text_table_lookahead_analysis_instances=text_table_mock,
     )
@@ -43,7 +45,9 @@ def test_start_lookahead_analysis(mocker):
         "--pairs",
         "UNITTEST/BTC",
         "--max-open-trades",
-        "1"
+        "1",
+        "--timerange",
+        "20220101-20220201"
     ]
     pargs = get_args(args)
     pargs['config'] = None
@@ -72,6 +76,24 @@ def test_start_lookahead_analysis(mocker):
                        match=r"Targeted trade amount can't be smaller than minimum trade amount.*"):
         start_lookahead_analysis(pargs)
 
+    # Missing timerange
+    args = [
+        "lookahead-analysis",
+        "--strategy",
+        "strategy_test_v3_with_lookahead_bias",
+        "--strategy-path",
+        str(Path(__file__).parent.parent / "strategy/strats/lookahead_bias"),
+        "--pairs",
+        "UNITTEST/BTC",
+        "--max-open-trades",
+        "1",
+    ]
+    pargs = get_args(args)
+    pargs['config'] = None
+    with pytest.raises(OperationalException,
+                       match=r"Please set a timerange\..*"):
+        start_lookahead_analysis(pargs)
+
 
 def test_lookahead_helper_invalid_config(lookahead_conf) -> None:
     conf = deepcopy(lookahead_conf)
@@ -95,7 +117,7 @@ def test_lookahead_helper_start(lookahead_conf, mocker) -> None:
     single_mock = MagicMock()
     text_table_mock = MagicMock()
     mocker.patch.multiple(
-        'freqtrade.optimize.lookahead_analysis_helpers.LookaheadAnalysisSubFunctions',
+        'freqtrade.optimize.analysis.lookahead_helpers.LookaheadAnalysisSubFunctions',
         initialize_single_lookahead_analysis=single_mock,
         text_table_lookahead_analysis_instances=text_table_mock,
     )
@@ -302,7 +324,7 @@ def test_initialize_single_lookahead_analysis(lookahead_conf, mocker, caplog):
 
     lookahead_conf['timeframe'] = '5m'
     lookahead_conf['timerange'] = '20180119-20180122'
-    start_mock = mocker.patch('freqtrade.optimize.lookahead_analysis.LookaheadAnalysis.start')
+    start_mock = mocker.patch('freqtrade.optimize.analysis.lookahead.LookaheadAnalysis.start')
     strategy_obj = {
         'name': "strategy_test_v3_with_lookahead_bias",
         'location': Path(lookahead_conf['strategy_path'], f"{lookahead_conf['strategy']}.py")

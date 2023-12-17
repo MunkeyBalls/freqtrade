@@ -36,13 +36,13 @@ def mock_order_usdt_1_exit(is_short: bool):
     return {
         'id': f'prod_exit_1_{direc(is_short)}',
         'symbol': 'LTC/USDT',
-        'status': 'closed',
+        'status': 'open',
         'side': exit_side(is_short),
         'type': 'limit',
         'price': 8.0,
         'amount': 2.0,
-        'filled': 2.0,
-        'remaining': 0.0,
+        'filled': 0.0,
+        'remaining': 2.0,
     }
 
 
@@ -66,7 +66,6 @@ def mock_trade_usdt_1(fee, is_short: bool):
         close_profit_abs=-4.09,
         exchange='binance',
         strategy='SampleStrategy',
-        open_order_id=f'prod_exit_1_{direc(is_short)}',
         timeframe=5,
         is_short=is_short,
     )
@@ -96,13 +95,13 @@ def mock_order_usdt_2_exit(is_short: bool):
     return {
         'id': f'12366_{direc(is_short)}',
         'symbol': 'NEO/USDT',
-        'status': 'closed',
+        'status': 'open',
         'side': exit_side(is_short),
         'type': 'limit',
         'price': 2.05,
         'amount': 100.0,
-        'filled': 100.0,
-        'remaining': 0.0,
+        'filled': 0.0,
+        'remaining': 100.0,
     }
 
 
@@ -123,7 +122,6 @@ def mock_trade_usdt_2(fee, is_short: bool):
         close_profit_abs=3.9875,
         exchange='binance',
         is_open=False,
-        open_order_id=f'12366_{direc(is_short)}',
         strategy='StrategyTestV2',
         timeframe=5,
         enter_tag='TEST1',
@@ -231,7 +229,6 @@ def mock_trade_usdt_4(fee, is_short: bool):
         is_open=True,
         open_rate=2.0,
         exchange='binance',
-        open_order_id=f'prod_buy_12345_{direc(is_short)}',
         strategy='StrategyTestV2',
         timeframe=5,
         is_short=is_short,
@@ -340,7 +337,6 @@ def mock_trade_usdt_6(fee, is_short: bool):
         open_rate=10.0,
         exchange='binance',
         strategy='SampleStrategy',
-        open_order_id=f'prod_exit_6_{direc(is_short)}',
         timeframe=5,
         is_short=is_short,
     )
@@ -378,7 +374,6 @@ def mock_trade_usdt_7(fee, is_short: bool):
         open_date=datetime.now(tz=timezone.utc) - timedelta(minutes=17),
         open_rate=2.0,
         exchange='binance',
-        open_order_id=f'1234_{direc(is_short)}',
         strategy='StrategyTestV2',
         timeframe=5,
         is_short=is_short,

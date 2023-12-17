@@ -31,7 +31,7 @@ class FreqaiExampleStrategy(IStrategy):
     plot_config = {
         "main_plot": {},
         "subplots": {
-            "&-s_close": {"prediction": {"color": "blue"}},
+            "&-s_close": {"&-s_close": {"color": "blue"}},
             "do_predict": {
                 "do_predict": {"color": "brown"},
             },
@@ -289,9 +289,6 @@ class FreqaiExampleStrategy(IStrategy):
             df.loc[reduce(lambda x, y: x & y, exit_short_conditions), "exit_short"] = 1
 
         return df
-
-    def get_ticker_indicator(self):
-        return int(self.config["timeframe"][:-1])
 
     def confirm_trade_entry(
         self,

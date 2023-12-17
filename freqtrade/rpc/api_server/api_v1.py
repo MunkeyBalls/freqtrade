@@ -11,16 +11,16 @@ from freqtrade.enums import CandleType, TradingMode
 from freqtrade.exceptions import OperationalException
 from freqtrade.rpc import RPC
 from freqtrade.rpc.api_server.api_schemas import (AvailablePairs, Balances, BlacklistPayload,
-                                                  BlacklistResponse, Count, Daily,
-                                                  DeleteLockRequest, DeleteTrade,
-                                                  ExchangeListResponse, ForceEnterPayload,
+                                                  BlacklistResponse, Count, DailyWeeklyMonthly,
+                                                  DeleteLockRequest, DeleteTrade, Entry,
+                                                  ExchangeListResponse, Exit, ForceEnterPayload,
                                                   ForceEnterResponse, ForceExitPayload,
                                                   FreqAIModelListResponse, Health, Locks, Logs,
-                                                  OpenTradeSchema, PairHistory, PerformanceEntry,
-                                                  Ping, PlotConfig, Profit, ResultMsg, ShowConfig,
-                                                  Stats, StatusMsg, StrategyListResponse,
-                                                  StrategyResponse, SysInfo, Version,
-                                                  WhitelistResponse
+                                                  MixTag, OpenTradeSchema, PairHistory,
+                                                  PerformanceEntry, Ping, PlotConfig, Profit,
+                                                  ResultMsg, ShowConfig, Stats, StatusMsg,
+                                                  StrategyListResponse, StrategyResponse, SysInfo,
+                                                  Version, WhitelistResponse
                                                   , AddLockRequest, HoldRequest, TrailRequest)
 from freqtrade.rpc.api_server.deps import get_config, get_exchange, get_rpc, get_rpc_optional
 from freqtrade.rpc.rpc import RPCException
@@ -51,7 +51,10 @@ logger = logging.getLogger(__name__)
 # 2.29: Add /exchanges endpoint
 # 2.30: new /pairlists endpoint
 # 2.31: new /backtest/history/ delete endpoint
-API_VERSION = 2.31
+# 2.32: new /backtest/history/ patch endpoint
+# 2.33: Additional weekly/monthly metrics
+# 2.34: new entries/exits/mix_tags endpoints
+API_VERSION = 2.34
 
 # Public API, requires no auth.
 router_public = APIRouter()
@@ -82,6 +85,21 @@ def count(rpc: RPC = Depends(get_rpc)):
     return rpc._rpc_count()
 
 
+@router.get('/entries', response_model=List[Entry], tags=['info'])
+def entries(pair: Optional[str] = None, rpc: RPC = Depends(get_rpc)):
+    return rpc._rpc_enter_tag_performance(pair)
+
+
+@router.get('/exits', response_model=List[Exit], tags=['info'])
+def exits(pair: Optional[str] = None, rpc: RPC = Depends(get_rpc)):
+    return rpc._rpc_exit_reason_performance(pair)
+
+
+@router.get('/mix_tags', response_model=List[MixTag], tags=['info'])
+def mix_tags(pair: Optional[str] = None, rpc: RPC = Depends(get_rpc)):
+    return rpc._rpc_mix_tag_performance(pair)
+
+
 @router.get('/performance', response_model=List[PerformanceEntry], tags=['info'])
 def performance(rpc: RPC = Depends(get_rpc)):
     return rpc._rpc_performance()
@@ -99,10 +117,22 @@ def stats(rpc: RPC = Depends(get_rpc)):
     return rpc._rpc_stats()
 
 
-@router.get('/daily', response_model=Daily, tags=['info'])
+@router.get('/daily', response_model=DailyWeeklyMonthly, tags=['info'])
 def daily(timescale: int = 7, rpc: RPC = Depends(get_rpc), config=Depends(get_config)):
     return rpc._rpc_timeunit_profit(timescale, config['stake_currency'],
                                     config.get('fiat_display_currency', ''))
+
+
+@router.get('/weekly', response_model=DailyWeeklyMonthly, tags=['info'])
+def weekly(timescale: int = 4, rpc: RPC = Depends(get_rpc), config=Depends(get_config)):
+    return rpc._rpc_timeunit_profit(timescale, config['stake_currency'],
+                                    config.get('fiat_display_currency', ''), 'weeks')
+
+
+@router.get('/monthly', response_model=DailyWeeklyMonthly, tags=['info'])
+def monthly(timescale: int = 3, rpc: RPC = Depends(get_rpc), config=Depends(get_config)):
+    return rpc._rpc_timeunit_profit(timescale, config['stake_currency'],
+                                    config.get('fiat_display_currency', ''), 'months')
 
 
 @router.get('/status', response_model=List[OpenTradeSchema], tags=['info'])
@@ -175,9 +205,9 @@ def force_entry(payload: ForceEnterPayload, rpc: RPC = Depends(get_rpc)):
                                  leverage=payload.leverage)
 
     if trade:
-        return ForceEnterResponse.parse_obj(trade.to_json())
+        return ForceEnterResponse.model_validate(trade.to_json())
     else:
-        return ForceEnterResponse.parse_obj(
+        return ForceEnterResponse.model_validate(
             {"status": f"Error entering {payload.side} trade for pair {payload.pair}."})
 
 
@@ -301,14 +331,14 @@ def plot_config(strategy: Optional[str] = None, config=Depends(get_config),
     if not strategy:
         if not rpc:
             raise RPCException("Strategy is mandatory in webserver mode.")
-        return PlotConfig.parse_obj(rpc._rpc_plot_config())
+        return PlotConfig.model_validate(rpc._rpc_plot_config())
     else:
         config1 = deepcopy(config)
         config1.update({
             'strategy': strategy
         })
     try:
-        return PlotConfig.parse_obj(RPC._rpc_plot_config_with_strategy(config1))
+        return PlotConfig.model_validate(RPC._rpc_plot_config_with_strategy(config1))
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 

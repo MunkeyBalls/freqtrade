@@ -14,7 +14,7 @@ import pytest
 
 from freqtrade import constants
 from freqtrade.commands import Arguments
-from freqtrade.data.converter import ohlcv_to_dataframe
+from freqtrade.data.converter import ohlcv_to_dataframe, trades_list_to_df
 from freqtrade.edge import PairInfo
 from freqtrade.enums import CandleType, MarginMode, RunMode, SignalDirection, TradingMode
 from freqtrade.exchange import Exchange
@@ -413,8 +413,8 @@ def patch_gc(mocker) -> None:
 
 
 @pytest.fixture(autouse=True)
-def user_dir(mocker, tmpdir) -> Path:
-    user_dir = Path(tmpdir) / "user_data"
+def user_dir(mocker, tmp_path) -> Path:
+    user_dir = tmp_path / "user_data"
     mocker.patch('freqtrade.configuration.configuration.create_userdata_dir',
                  return_value=user_dir)
     return user_dir
@@ -526,6 +526,7 @@ def get_default_conf(testdatadir):
         "disableparamexport": True,
         "internals": {},
         "export": "none",
+        "dataformat_ohlcv": "feather",
         "candle_type_def": CandleType.SPOT,
     }
     return configuration
@@ -2345,7 +2346,15 @@ def trades_history():
             [1565798399629, '1261813bb30', None, 'buy', 0.019627, 0.244, 0.004788987999999999],
             [1565798399752, '1261813cc31', None, 'sell', 0.019626, 0.011, 0.00021588599999999999],
             [1565798399862, '126181cc332', None, 'sell', 0.019626, 0.011, 0.00021588599999999999],
-            [1565798399872, '1261aa81333', None, 'sell', 0.019626, 0.011, 0.00021588599999999999]]
+            [1565798399862, '126181cc333', None, 'sell', 0.019626, 0.012, 0.00021588599999999999],
+            [1565798399872, '1261aa81334', None, 'sell', 0.019626, 0.011, 0.00021588599999999999]]
+
+
+@pytest.fixture(scope="function")
+def trades_history_df(trades_history):
+    trades = trades_list_to_df(trades_history)
+    trades['date'] = pd.to_datetime(trades['timestamp'], unit='ms', utc=True)
+    return trades
 
 
 @pytest.fixture(scope="function")
@@ -2592,7 +2601,6 @@ def open_trade():
         pair='ETH/BTC',
         open_rate=0.00001099,
         exchange='binance',
-        open_order_id='123456789',
         amount=90.99181073,
         fee_open=0.0,
         fee_close=0.0,
@@ -2604,7 +2612,7 @@ def open_trade():
         Order(
             ft_order_side='buy',
             ft_pair=trade.pair,
-            ft_is_open=False,
+            ft_is_open=True,
             ft_amount=trade.amount,
             ft_price=trade.open_rate,
             order_id='123456789',
@@ -2630,7 +2638,6 @@ def open_trade_usdt():
         pair='ADA/USDT',
         open_rate=2.0,
         exchange='binance',
-        open_order_id='123456789_exit',
         amount=30.0,
         fee_open=0.0,
         fee_close=0.0,

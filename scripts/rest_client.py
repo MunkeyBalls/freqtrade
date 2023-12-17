@@ -112,6 +112,30 @@ class FtRestClient:
         """
         return self._get("count")
 
+    def entries(self, pair=None):
+        """Returns List of dicts containing all Trades, based on buy tag performance
+        Can either be average for all pairs or a specific pair provided
+
+        :return: json object
+        """
+        return self._get("entries", params={"pair": pair} if pair else None)
+
+    def exits(self, pair=None):
+        """Returns List of dicts containing all Trades, based on exit reason performance
+        Can either be average for all pairs or a specific pair provided
+
+        :return: json object
+        """
+        return self._get("exits", params={"pair": pair} if pair else None)
+
+    def mix_tags(self, pair=None):
+        """Returns List of dicts containing all Trades, based on entry_tag + exit_reason performance
+        Can either be average for all pairs or a specific pair provided
+
+        :return: json object
+        """
+        return self._get("mix_tags", params={"pair": pair} if pair else None)
+
     def locks(self):
         """Return current locks
 
@@ -133,6 +157,20 @@ class FtRestClient:
         :return: json object
         """
         return self._get("daily", params={"timescale": days} if days else None)
+
+    def weekly(self, weeks=None):
+        """Return the profits for each week, and amount of trades.
+
+        :return: json object
+        """
+        return self._get("weekly", params={"timescale": weeks} if weeks else None)
+
+    def monthly(self, months=None):
+        """Return the profits for each month, and amount of trades.
+
+        :return: json object
+        """
+        return self._get("monthly", params={"timescale": months} if months else None)
 
     def edge(self):
         """Return information about edge.

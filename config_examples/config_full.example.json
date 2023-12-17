@@ -70,6 +70,7 @@
     },
     "pairlists": [
         {"method": "StaticPairList"},
+        {"method": "FullTradesFilter"},
         {
             "method": "VolumePairList",
             "number_assets": 20,
@@ -89,7 +90,6 @@
     ],
     "exchange": {
         "name": "binance",
-        "sandbox": false,
         "key": "your_exchange_key",
         "secret": "your_exchange_secret",
         "password": "",
@@ -206,6 +206,6 @@
     "recursive_strategy_search": false,
     "add_config_files": [],
     "reduce_df_footprint": false,
-    "dataformat_ohlcv": "json",
-    "dataformat_trades": "jsongz"
+    "dataformat_ohlcv": "feather",
+    "dataformat_trades": "feather"
 }

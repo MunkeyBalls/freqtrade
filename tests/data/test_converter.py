@@ -1,16 +1,18 @@
 # pragma pylint: disable=missing-docstring, C0103
 import logging
-from pathlib import Path
 from shutil import copyfile
 
 import numpy as np
+import pandas as pd
 import pytest
+from pandas.testing import assert_frame_equal
 
 from freqtrade.configuration.timerange import TimeRange
 from freqtrade.data.converter import (convert_ohlcv_format, convert_trades_format,
-                                      ohlcv_fill_up_missing_data, ohlcv_to_dataframe,
-                                      reduce_dataframe_footprint, trades_dict_to_list,
-                                      trades_remove_duplicates, trades_to_ohlcv, trim_dataframe)
+                                      convert_trades_to_ohlcv, ohlcv_fill_up_missing_data,
+                                      ohlcv_to_dataframe, reduce_dataframe_footprint,
+                                      trades_df_remove_duplicates, trades_dict_to_list,
+                                      trades_to_ohlcv, trim_dataframe)
 from freqtrade.data.history import (get_timerange, load_data, load_pair_history,
                                     validate_backtest_data)
 from freqtrade.data.history.idatahandler import IDataHandler
@@ -34,26 +36,21 @@ def test_ohlcv_to_dataframe(ohlcv_history_list, caplog):
     assert log_has('Converting candle (OHLCV) data to dataframe for pair UNITTEST/BTC.', caplog)
 
 
-def test_trades_to_ohlcv(ohlcv_history_list, caplog):
+def test_trades_to_ohlcv(trades_history_df, caplog):
 
     caplog.set_level(logging.DEBUG)
     with pytest.raises(ValueError, match="Trade-list empty."):
-        trades_to_ohlcv([], '1m')
+        trades_to_ohlcv(pd.DataFrame(columns=trades_history_df.columns), '1m')
 
-    trades = [
-        [1570752011620, "13519807", None, "sell", 0.00141342, 23.0, 0.03250866],
-        [1570752011620, "13519808", None, "sell", 0.00141266, 54.0, 0.07628364],
-        [1570752017964, "13519809", None, "sell", 0.00141266, 8.0, 0.01130128]]
-
-    df = trades_to_ohlcv(trades, '1m')
+    df = trades_to_ohlcv(trades_history_df, '1m')
     assert not df.empty
     assert len(df) == 1
     assert 'open' in df.columns
     assert 'high' in df.columns
     assert 'low' in df.columns
     assert 'close' in df.columns
-    assert df.loc[:, 'high'][0] == 0.00141342
-    assert df.loc[:, 'low'][0] == 0.00141266
+    assert df.iloc[0, :]['high'] == 0.019627
+    assert df.iloc[0, :]['low'] == 0.019626
 
 
 def test_ohlcv_fill_up_missing_data(testdatadir, caplog):
@@ -302,13 +299,13 @@ def test_trim_dataframe(testdatadir) -> None:
     assert all(data_modify.iloc[0] == data.iloc[25])
 
 
-def test_trades_remove_duplicates(trades_history):
-    trades_history1 = trades_history * 3
-    assert len(trades_history1) == len(trades_history) * 3
-    res = trades_remove_duplicates(trades_history1)
-    assert len(res) == len(trades_history)
-    for i, t in enumerate(res):
-        assert t == trades_history[i]
+def test_trades_df_remove_duplicates(trades_history_df):
+    trades_history1 = pd.concat([trades_history_df, trades_history_df, trades_history_df]
+                                ).reset_index(drop=True)
+    assert len(trades_history1) == len(trades_history_df) * 3
+    res = trades_df_remove_duplicates(trades_history1)
+    assert len(res) == len(trades_history_df)
+    assert res.equals(trades_history_df)
 
 
 def test_trades_dict_to_list(fetch_trades_result):
@@ -325,18 +322,17 @@ def test_trades_dict_to_list(fetch_trades_result):
         assert t[6] == fetch_trades_result[i]['cost']
 
 
-def test_convert_trades_format(default_conf, testdatadir, tmpdir):
-    tmpdir1 = Path(tmpdir)
-    files = [{'old': tmpdir1 / "XRP_ETH-trades.json.gz",
-              'new': tmpdir1 / "XRP_ETH-trades.json"},
-             {'old': tmpdir1 / "XRP_OLD-trades.json.gz",
-              'new': tmpdir1 / "XRP_OLD-trades.json"},
+def test_convert_trades_format(default_conf, testdatadir, tmp_path):
+    files = [{'old': tmp_path / "XRP_ETH-trades.json.gz",
+              'new': tmp_path / "XRP_ETH-trades.json"},
+             {'old': tmp_path / "XRP_OLD-trades.json.gz",
+              'new': tmp_path / "XRP_OLD-trades.json"},
              ]
     for file in files:
         copyfile(testdatadir / file['old'].name, file['old'])
         assert not file['new'].exists()
 
-    default_conf['datadir'] = tmpdir1
+    default_conf['datadir'] = tmp_path
 
     convert_trades_format(default_conf, convert_from='jsongz',
                           convert_to='json', erase=False)
@@ -364,16 +360,15 @@ def test_convert_trades_format(default_conf, testdatadir, tmpdir):
     (['UNITTEST_USDT_USDT-1h-mark', 'XRP_USDT_USDT-1h-mark'], CandleType.MARK),
     (['XRP_USDT_USDT-1h-futures'], CandleType.FUTURES),
 ])
-def test_convert_ohlcv_format(default_conf, testdatadir, tmpdir, file_base, candletype):
-    tmpdir1 = Path(tmpdir)
+def test_convert_ohlcv_format(default_conf, testdatadir, tmp_path, file_base, candletype):
     prependix = '' if candletype == CandleType.SPOT else 'futures/'
     files_orig = []
     files_temp = []
     files_new = []
     for file in file_base:
-        file_orig = testdatadir / f"{prependix}{file}.json"
-        file_temp = tmpdir1 / f"{prependix}{file}.json"
-        file_new = tmpdir1 / f"{prependix}{file}.json.gz"
+        file_orig = testdatadir / f"{prependix}{file}.feather"
+        file_temp = tmp_path / f"{prependix}{file}.feather"
+        file_new = tmp_path / f"{prependix}{file}.json.gz"
         IDataHandler.create_dir_if_needed(file_temp)
         copyfile(file_orig, file_temp)
 
@@ -381,7 +376,7 @@ def test_convert_ohlcv_format(default_conf, testdatadir, tmpdir, file_base, cand
         files_temp.append(file_temp)
         files_new.append(file_new)
 
-    default_conf['datadir'] = tmpdir1
+    default_conf['datadir'] = tmp_path
     default_conf['candle_types'] = [candletype]
 
     if candletype == CandleType.SPOT:
@@ -394,7 +389,7 @@ def test_convert_ohlcv_format(default_conf, testdatadir, tmpdir, file_base, cand
 
     convert_ohlcv_format(
         default_conf,
-        convert_from='json',
+        convert_from='feather',
         convert_to='jsongz',
         erase=False,
     )
@@ -408,7 +403,7 @@ def test_convert_ohlcv_format(default_conf, testdatadir, tmpdir, file_base, cand
     convert_ohlcv_format(
         default_conf,
         convert_from='jsongz',
-        convert_to='json',
+        convert_to='feather',
         erase=True,
     )
     for file in (files_temp):
@@ -445,3 +440,38 @@ def test_reduce_dataframe_footprint():
     # Changes dtype of returned dataframe
     assert df2['open_copy'].dtype == np.float32
     assert df2['close_copy'].dtype == np.float32
+
+
+def test_convert_trades_to_ohlcv(testdatadir, tmp_path, caplog):
+    pair = 'XRP/ETH'
+    file1 = tmp_path / 'XRP_ETH-1m.feather'
+    file5 = tmp_path / 'XRP_ETH-5m.feather'
+    filetrades = tmp_path / 'XRP_ETH-trades.json.gz'
+    copyfile(testdatadir / file1.name, file1)
+    copyfile(testdatadir / file5.name, file5)
+    copyfile(testdatadir / filetrades.name, filetrades)
+
+    # Compare downloaded dataset with converted dataset
+    dfbak_1m = load_pair_history(datadir=tmp_path, timeframe="1m", pair=pair)
+    dfbak_5m = load_pair_history(datadir=tmp_path, timeframe="5m", pair=pair)
+
+    tr = TimeRange.parse_timerange('20191011-20191012')
+
+    convert_trades_to_ohlcv([pair], timeframes=['1m', '5m'],
+                            data_format_trades='jsongz',
+                            datadir=tmp_path, timerange=tr, erase=True)
+
+    assert log_has("Deleting existing data for pair XRP/ETH, interval 1m.", caplog)
+    # Load new data
+    df_1m = load_pair_history(datadir=tmp_path, timeframe="1m", pair=pair)
+    df_5m = load_pair_history(datadir=tmp_path, timeframe="5m", pair=pair)
+
+    assert_frame_equal(dfbak_1m, df_1m, check_exact=True)
+    assert_frame_equal(dfbak_5m, df_5m, check_exact=True)
+    msg = 'Could not convert NoDatapair to OHLCV.'
+    assert not log_has(msg, caplog)
+
+    convert_trades_to_ohlcv(['NoDatapair'], timeframes=['1m', '5m'],
+                            data_format_trades='jsongz',
+                            datadir=tmp_path, timerange=tr, erase=True)
+    assert log_has(msg, caplog)

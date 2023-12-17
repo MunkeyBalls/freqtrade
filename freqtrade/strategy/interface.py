@@ -373,7 +373,7 @@ class IStrategy(ABC, HyperStrategyMixin):
         return True
 
     def custom_stoploss(self, pair: str, trade: Trade, current_time: datetime, current_rate: float,
-                        current_profit: float, **kwargs) -> float:
+                        current_profit: float, after_fill: bool, **kwargs) -> Optional[float]:
         """
         Custom stoploss logic, returning the new distance relative to current_rate (as ratio).
         e.g. returning -0.05 would create a stoploss 5% below current_rate.
@@ -381,7 +381,7 @@ class IStrategy(ABC, HyperStrategyMixin):
 
         For full documentation please go to https://www.freqtrade.io/en/latest/strategy-advanced/
 
-        When not implemented by a strategy, returns the initial stoploss value
+        When not implemented by a strategy, returns the initial stoploss value.
         Only called when use_custom_stoploss is set to True.
 
         :param pair: Pair that's currently analyzed
@@ -389,12 +389,14 @@ class IStrategy(ABC, HyperStrategyMixin):
         :param current_time: datetime object, containing the current datetime
         :param current_rate: Rate, calculated based on pricing settings in exit_pricing.
         :param current_profit: Current profit (as ratio), calculated based on current_rate.
+        :param after_fill: True if the stoploss is called after the order was filled.
         :param **kwargs: Ensure to keep this here so updates to this won't break your strategy.
         :return float: New stoploss value, relative to the current_rate
         """
         return self.stoploss
 
-    def custom_entry_price(self, pair: str, current_time: datetime, proposed_rate: float,
+    def custom_entry_price(self, pair: str, trade: Optional[Trade],
+                           current_time: datetime, proposed_rate: float,
                            entry_tag: Optional[str], side: str, **kwargs) -> float:
         """
         Custom entry price logic, returning the new entry price.
@@ -404,6 +406,7 @@ class IStrategy(ABC, HyperStrategyMixin):
         When not implemented by a strategy, returns None, orderbook is used to set entry price
 
         :param pair: Pair that's currently analyzed
+        :param trade: trade object (None for initial entries).
         :param current_time: datetime object, containing the current datetime
         :param proposed_rate: Rate, calculated based on pricing settings in exit_pricing.
         :param entry_tag: Optional entry_tag (buy_tag) if provided with the buy signal.
@@ -512,7 +515,7 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         Custom trade adjustment logic, returning the stake amount that a trade should be
         increased or decreased.
-        This means extra buy or sell orders with additional fees.
+        This means extra entry or exit orders with additional fees.
         Only called when `position_adjustment_enable` is set to True.
 
         For full documentation please go to https://www.freqtrade.io/en/latest/strategy-advanced/
@@ -521,8 +524,9 @@ class IStrategy(ABC, HyperStrategyMixin):
 
         :param trade: trade object.
         :param current_time: datetime object, containing the current datetime
-        :param current_rate: Current buy rate.
-        :param current_profit: Current profit (as ratio), calculated based on current_rate.
+        :param current_rate: Current entry rate (same as current_entry_profit)
+        :param current_profit: Current profit (as ratio), calculated based on current_rate
+                               (same as current_entry_profit).
         :param min_stake: Minimal stake size allowed by exchange (for both entries and exits)
         :param max_stake: Maximum stake allowed (either through balance, or by exchange limits).
         :param current_entry_rate: Current rate using entry pricing.
@@ -719,6 +723,8 @@ class IStrategy(ABC, HyperStrategyMixin):
 # END - Intended to be overridden by strategy
 ###
 
+    _ft_stop_uses_after_fill = False
+
     def __informative_pairs_freqai(self) -> ListPairsWithTimeframes:
         """
         Create informative-pairs needed for FreqAI
@@ -750,12 +756,23 @@ class IStrategy(ABC, HyperStrategyMixin):
             candle_type = (inf_data.candle_type if inf_data.candle_type
                            else self.config.get('candle_type_def', CandleType.SPOT))
             if inf_data.asset:
-                pair_tf = (
-                    _format_pair_name(self.config, inf_data.asset),
-                    inf_data.timeframe,
-                    candle_type,
-                )
-                informative_pairs.append(pair_tf)
+                if any(s in inf_data.asset for s in ("{BASE}", "{base}")):
+                    for pair in self.dp.current_whitelist():
+
+                        pair_tf = (
+                            _format_pair_name(self.config, inf_data.asset, self.dp.market(pair)),
+                            inf_data.timeframe,
+                            candle_type,
+                        )
+                        informative_pairs.append(pair_tf)
+
+                else:
+                    pair_tf = (
+                        _format_pair_name(self.config, inf_data.asset),
+                        inf_data.timeframe,
+                        candle_type,
+                    )
+                    informative_pairs.append(pair_tf)
             else:
                 for pair in self.dp.current_whitelist():
                     informative_pairs.append((pair, inf_data.timeframe, candle_type))
@@ -1000,7 +1017,7 @@ class IStrategy(ABC, HyperStrategyMixin):
             exit_ = latest.get(SignalType.EXIT_LONG.value, 0) == 1
         exit_tag = latest.get(SignalTagType.EXIT_TAG.value, None)
         # Tags can be None, which does not resolve to False.
-        exit_tag = exit_tag if isinstance(exit_tag, str) else None
+        exit_tag = exit_tag if isinstance(exit_tag, str) and exit_tag != 'nan' else None
 
         logger.debug(f"exit-trigger: {latest['date']} (pair={pair}) "
                      f"enter={enter} exit={exit_}")
@@ -1032,17 +1049,17 @@ class IStrategy(ABC, HyperStrategyMixin):
         exit_short = latest.get(SignalType.EXIT_SHORT.value, 0) == 1
 
         enter_signal: Optional[SignalDirection] = None
-        enter_tag_value: Optional[str] = None
+        enter_tag: Optional[str] = None
         if enter_long == 1 and not any([exit_long, enter_short]):
             enter_signal = SignalDirection.LONG
-            enter_tag_value = latest.get(SignalTagType.ENTER_TAG.value, None)
+            enter_tag = latest.get(SignalTagType.ENTER_TAG.value, None)
         if (self.config.get('trading_mode', TradingMode.SPOT) != TradingMode.SPOT
                 and self.can_short
                 and enter_short == 1 and not any([exit_short, enter_long])):
             enter_signal = SignalDirection.SHORT
-            enter_tag_value = latest.get(SignalTagType.ENTER_TAG.value, None)
+            enter_tag = latest.get(SignalTagType.ENTER_TAG.value, None)
 
-        enter_tag_value = enter_tag_value if isinstance(enter_tag_value, str) else None
+        enter_tag = enter_tag if isinstance(enter_tag, str) and enter_tag != 'nan' else None
 
         timeframe_seconds = timeframe_to_seconds(timeframe)
 
@@ -1052,11 +1069,11 @@ class IStrategy(ABC, HyperStrategyMixin):
             timeframe_seconds=timeframe_seconds,
             enter=bool(enter_signal)
         ):
-            return None, enter_tag_value
+            return None, enter_tag
 
         logger.debug(f"entry trigger: {latest['date']} (pair={pair}) "
-                     f"enter={enter_long} enter_tag_value={enter_tag_value}")
-        return enter_signal, enter_tag_value
+                     f"enter={enter_long} enter_tag_value={enter_tag}")
+        return enter_signal, enter_tag
 
     def ignore_expired_candle(
         self,
@@ -1160,13 +1177,17 @@ class IStrategy(ABC, HyperStrategyMixin):
     def ft_stoploss_adjust(self, current_rate: float, trade: Trade,
                            current_time: datetime, current_profit: float,
                            force_stoploss: float, low: Optional[float] = None,
-                           high: Optional[float] = None) -> None:
+                           high: Optional[float] = None, after_fill: bool = False) -> None:
         """
         Adjust stop-loss dynamically if configured to do so.
         :param current_profit: current profit as ratio
         :param low: Low value of this candle, only set in backtesting
         :param high: High value of this candle, only set in backtesting
         """
+        if after_fill and not self._ft_stop_uses_after_fill:
+            # Skip if the strategy doesn't support after fill.
+            return
+
         stop_loss_value = force_stoploss if force_stoploss else self.stoploss
 
         # Initiate stoploss with open_rate. Does nothing if stoploss is already set.
@@ -1181,17 +1202,20 @@ class IStrategy(ABC, HyperStrategyMixin):
         bound = (low if trade.is_short else high)
         bound_profit = current_profit if not bound else trade.calc_profit_ratio(bound)
         if self.use_custom_stoploss and dir_correct:
-            stop_loss_value = strategy_safe_wrapper(self.custom_stoploss, default_retval=None
-                                                    )(pair=trade.pair, trade=trade,
-                                                      current_time=current_time,
-                                                      current_rate=(bound or current_rate),
-                                                      current_profit=bound_profit)
+            stop_loss_value_custom = strategy_safe_wrapper(
+                self.custom_stoploss, default_retval=None, supress_error=True
+                    )(pair=trade.pair, trade=trade,
+                        current_time=current_time,
+                        current_rate=(bound or current_rate),
+                        current_profit=bound_profit,
+                        after_fill=after_fill)
             # Sanity check - error cases will return None
-            if stop_loss_value:
-                # logger.info(f"{trade.pair} {stop_loss_value=} {bound_profit=}")
-                trade.adjust_stop_loss(bound or current_rate, stop_loss_value)
+            if stop_loss_value_custom:
+                stop_loss_value = stop_loss_value_custom
+                trade.adjust_stop_loss(bound or current_rate, stop_loss_value,
+                                       allow_refresh=after_fill)
             else:
-                logger.warning("CustomStoploss function did not return valid stoploss")
+                logger.debug("CustomStoploss function did not return valid stoploss")
 
         if trade.trail_pct is not None and trade.trail_pct != 0.0: 
             if (bound_profit >= trade.trail_pct
@@ -1242,10 +1266,6 @@ class IStrategy(ABC, HyperStrategyMixin):
                            and trade.liquidation_price <= (high or current_rate)
                            and trade.is_short)
 
-        if (liq_higher_long or liq_lower_short):
-            logger.debug(f"{trade.pair} - Liquidation price hit. exit_type=ExitType.LIQUIDATION")
-            return ExitCheckTuple(exit_type=ExitType.LIQUIDATION)
-
         # evaluate if the stoploss was hit if stoploss is not on exchange
         # in Dry-Run, this handles stoploss logic as well, as the logic will not be different to
         # regular stoploss handling.
@@ -1255,7 +1275,7 @@ class IStrategy(ABC, HyperStrategyMixin):
             exit_type = ExitType.STOP_LOSS
 
             # If initial stoploss is not the same as current one then it is trailing.
-            if trade.initial_stop_loss != trade.stop_loss:
+            if trade.is_stop_loss_trailing:
                 exit_type = ExitType.TRAILING_STOP_LOSS
                 logger.debug(
                     f"{trade.pair} - HIT STOP: current price at "
@@ -1265,6 +1285,10 @@ class IStrategy(ABC, HyperStrategyMixin):
                     f"trade opened at {trade.open_rate:.6f}")
 
             return ExitCheckTuple(exit_type=exit_type)
+
+        if (liq_higher_long or liq_lower_short):
+            logger.debug(f"{trade.pair} - Liquidation price hit. exit_type=ExitType.LIQUIDATION")
+            return ExitCheckTuple(exit_type=ExitType.LIQUIDATION)
 
         return ExitCheckTuple(exit_type=ExitType.NONE)
 
