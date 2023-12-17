@@ -226,7 +226,7 @@ class Telegram(RPCHandler):
             CommandHandler('version', self._version),
             CommandHandler('marketdir', self._changemarketdir),
             CommandHandler('order', self._order),            
-            , CommandHandler('add_lock', self._add_lock),
+            CommandHandler('add_lock', self._add_lock),
             CommandHandler('hold', self._update_hold),
             CommandHandler('trail', self._update_trail),
         ]
