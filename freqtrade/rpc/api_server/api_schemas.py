@@ -337,6 +337,7 @@ class TradeSchema(BaseModel):
     precision_mode: Optional[int] = None
 
     hold_pct: Optional[float]
+    trail_pct: Optional[float]
 
 
 class OpenTradeSchema(TradeSchema):
@@ -382,6 +383,10 @@ class DeleteLockRequest(BaseModel):
     pair: Optional[str] = None
     lockid: Optional[int] = None
 
+class AddLockRequest(BaseModel):
+    pair: str
+    minutes: Optional[float]
+    reason: Optional[str]
 
 class HoldRequest(BaseModel):
     id: str

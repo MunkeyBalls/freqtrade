@@ -1456,3 +1456,19 @@ class RPC:
             if self._config.get('position_adjustment_enable', False):
                 columns.append('# Entries')
             return trades_list, columns, fiat_profit_sum
+        
+    def _rpc_add_lock(self, pair: Optional[str] = None, minutes: Optional[float] = None, reason: Optional[str] = None) -> Dict[str, Any]:
+        """ Adds a lock """
+
+        if not minutes:
+            minutes = 30
+
+        if not reason:
+            reason = 'AddLock'
+
+        until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+
+        if pair:
+            PairLocks.lock_pair(pair, until, reason)
+
+        return self._rpc_locks()        
