@@ -2221,7 +2221,7 @@ class FreqtradeBot(LoggingMixin):
         if not trade.is_open or trade.nr_of_successful_entries == 0:
             return False
 
-        if trade.has_open_orders is None:
+        if trade.open_order_id is None:
             return True        
 
         # Block if exit order pending, allow if only entries
