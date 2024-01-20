@@ -156,9 +156,9 @@ def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame
 
 Out of the box, freqtrade installs the following technical libraries:
 
-* [ta-lib](http://mrjbq7.github.io/ta-lib/)
-* [pandas-ta](https://twopirllc.github.io/pandas-ta/)
-* [technical](https://github.com/freqtrade/technical/)
+- [ta-lib](https://ta-lib.github.io/ta-lib-python/)
+- [pandas-ta](https://twopirllc.github.io/pandas-ta/)
+- [technical](https://github.com/freqtrade/technical/)
 
 Additional technical libraries can be installed as necessary, or custom indicators may be written / invented by the strategy author.
 
@@ -366,6 +366,11 @@ class AwesomeStrategy(IStrategy):
         str(timeframe_mins * 6): 0.01,  # 1% After 6 candles
     }
 ```
+
+??? info "Orders that don't fill immediately"
+    `minimal_roi` will take the `trade.open_date` as reference, which is the time the trade was initialized / the first order for this trade was placed.  
+    This will also hold true for limit orders that don't fill immediately  (usually in combination with "off-spot" prices through `custom_entry_price()`), as well as for cases where the initial order is replaced through `adjust_entry_price()`.
+    The time used will still be from the initial `trade.open_date` (when the initial order was first placed), not from the newly placed order date.
 
 ### Stoploss
 
