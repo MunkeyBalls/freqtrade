@@ -164,7 +164,7 @@ class Telegram(RPCHandler):
             r'/forcesell$', r'/forceexit$',
             r'/edge$', r'/health$', r'/help$', r'/version$', r'/marketdir (long|short|even|none)$',
             r'/marketdir$'
-            ,r'/hold$',
+            ,r'/hold$', r'/add_lock$',
         ]
         # Create keys for generation
         valid_keys_print = [k.replace('$', '') for k in valid_keys]
@@ -243,7 +243,8 @@ class Telegram(RPCHandler):
             CommandHandler('help', self._help),
             CommandHandler('version', self._version),
             CommandHandler('marketdir', self._changemarketdir),
-            CommandHandler('order', self._order),
+            CommandHandler('order', self._order),            
+            CommandHandler('add_lock', self._add_lock),
             CommandHandler('hold', self._update_hold),
         ]
         callbacks = [
@@ -1700,6 +1701,7 @@ class Telegram(RPCHandler):
             "*/version:* `Show version`\n"
             "_CustomCommands_\n"
             "------------\n"
+            "*/add_lock <trade_id> [<minutes>]:* `Add a pair lock`\n"
             "*/hold <id> [<percentage>]:* `Hold a pair until profit percentage is met. Also disables re-buy for now.`\n"
             )
 
@@ -1928,3 +1930,14 @@ class Telegram(RPCHandler):
         except RPCException as e:
             await self._send_msg(str(e))
 
+    @authorized_only
+    def _add_lock(self, update: Update, context: CallbackContext) -> None:
+        """
+        Handler for /add_lock.
+        Adds a locked pair
+        """
+        if context.args:
+            pair = context.args[0]
+            minutes = float(context.args[1]) if len(context.args) > 1 else None
+            self._rpc._rpc_add_lock(pair=pair, minutes=minutes)
+            self._locks(update, context)

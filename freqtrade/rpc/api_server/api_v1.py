@@ -20,7 +20,8 @@ from freqtrade.rpc.api_server.api_schemas import (AvailablePairs, Balances, Blac
                                                   PerformanceEntry, Ping, PlotConfig, Profit,
                                                   ResultMsg, ShowConfig, Stats, StatusMsg,
                                                   StrategyListResponse, StrategyResponse, SysInfo,
-                                                  Version, WhitelistResponse)
+                                                  Version, WhitelistResponse
+                                                  , AddLockRequest, HoldRequest)
 from freqtrade.rpc.api_server.deps import get_config, get_exchange, get_rpc, get_rpc_optional
 from freqtrade.rpc.rpc import RPCException
 
@@ -253,6 +254,10 @@ def delete_lock(lockid: int, rpc: RPC = Depends(get_rpc)):
 @router.post('/locks/delete', response_model=Locks, tags=['info', 'locks'])
 def delete_lock_pair(payload: DeleteLockRequest, rpc: RPC = Depends(get_rpc)):
     return rpc._rpc_delete_lock(lockid=payload.lockid, pair=payload.pair)
+
+@router.post('/locks/add', response_model=Locks, tags=['info', 'locks'])
+def add_lock(payload: AddLockRequest, rpc: RPC = Depends(get_rpc)):
+    return rpc._rpc_add_lock(pair=payload.pair, minutes=payload.minutes, reason=payload.reason)
 
 
 @router.post('/hold', response_model=OpenTradeSchema, tags=['trading'])
