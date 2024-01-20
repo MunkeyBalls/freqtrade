@@ -20,8 +20,7 @@ from freqtrade.rpc.api_server.api_schemas import (AvailablePairs, Balances, Blac
                                                   PerformanceEntry, Ping, PlotConfig, Profit,
                                                   ResultMsg, ShowConfig, Stats, StatusMsg,
                                                   StrategyListResponse, StrategyResponse, SysInfo,
-                                                  Version, WhitelistResponse
-                                                  , AddLockRequest)
+                                                  Version, WhitelistResponse)
 from freqtrade.rpc.api_server.deps import get_config, get_exchange, get_rpc, get_rpc_optional
 from freqtrade.rpc.rpc import RPCException
 
