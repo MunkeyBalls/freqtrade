@@ -757,6 +757,7 @@ class FreqtradeBot(LoggingMixin):
                 f"{stake_amount} ..."
                 ))
         logger.info(msg)
+        hold_pct = self.config.get('forcebuy_hold_pct', 0.0) if enter_tag == 'force_entry' else 0.0          
         amount = (stake_amount / enter_limit_requested) * leverage
         order_type = ordertype or self.strategy.order_types['entry']
 
@@ -855,6 +856,7 @@ class FreqtradeBot(LoggingMixin):
                 price_precision=self.exchange.get_precision_price(pair),
                 precision_mode=self.exchange.precisionMode,
                 contract_size=self.exchange.get_contract_size(pair),
+                hold_pct=hold_pct,
             )
             stoploss = self.strategy.stoploss if not self.edge else self.edge.get_stoploss(pair)
             trade.adjust_stop_loss(trade.open_rate, stoploss, initial=True)
@@ -1094,7 +1096,7 @@ class FreqtradeBot(LoggingMixin):
                     logger.warning(
                         f'Unable to handle stoploss on exchange for {trade.pair}: {exception}')
                 # Check if we can sell our current pair
-                if not trade.has_open_orders and trade.is_open and self.handle_trade(trade):
+                if not trade.has_open_orders and trade.is_open and self.allow_exit_trade(trade) and self.handle_trade(trade):
                     trades_closed += 1
 
             except DependencyException as exception:
@@ -1742,6 +1744,11 @@ class FreqtradeBot(LoggingMixin):
             logger.info(f"User denied exit for {trade.pair}.")
             return False
 
+        # Abort sell if trade is in hold
+        if self._should_hold_trade(trade, exit_check, limit) :
+            logger.info(f"Aborted selling {trade.pair} because of active hold")
+            return False
+
         try:
             # Execute sell and update trade record
             order = self.exchange.create_order(
@@ -2173,3 +2180,93 @@ class FreqtradeBot(LoggingMixin):
         return max(
             min(valid_custom_price, max_custom_price_allowed),
             min_custom_price_allowed)
+
+    def update_hold(self, id: str, pct: float) -> bool:
+        trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
+        pairtrade = Trade.get_trades(trade_filter).first()        
+        if not pairtrade:
+            return False
+
+        pairtrade.hold_pct = pct if pct else 0.0        
+        Trade.commit()
+
+    def _notify_enter_cancel_strategy(self, pair: str, buy_tag: str, rate: float, order_type: str, amount: float) -> None:
+        """
+        Sends rpc notification when a buy cancel occurred from the strategy.
+        """       
+        reason = f"Strategy cancelled entry at rate: {rate}"
+
+        msg = {
+            'trade_id': "None",
+            'type': RPCMessageType.ENTRY_CANCEL_STRATEGY,
+            'buy_tag': buy_tag,
+            'exchange': self.exchange.name.capitalize(),
+            'pair': pair,
+            #'limit': rate,
+            'order_type': order_type,
+            #'stake_amount': trade.stake_amount,
+            'stake_currency': self.config['stake_currency'],
+            'fiat_currency': self.config.get('fiat_display_currency', None),
+            'amount': amount,
+            #'open_date': trade.open_date,
+            'current_rate': rate,
+            'reason': reason,
+        }
+
+        # Send the message
+        self.rpc.send_msg(msg)
+
+    def allow_exit_trade(self, trade: Trade) -> bool:
+        
+        if not trade.is_open or trade.nr_of_successful_entries == 0:
+            return False
+
+        if trade.has_open_orders is None:
+            return True        
+
+        # Block if exit order pending, allow if only entries
+        open_exit_count = len([order for order in trade.orders if order.status == 'open' and order.side == trade.exit_side])
+        if open_exit_count:
+            return False
+
+        return True        
+
+    def _should_hold_trade(self, trade: Trade, exit_reason: ExitCheckTuple, rate: float) -> bool:        
+        hold_trade = False
+        logger.warning("Checking holds for %s sell reason %s", trade, exit_reason.exit_type)
+        if trade.hold_pct is not None:
+            if trade.hold_pct != 0.0 and exit_reason.exit_type not in (ExitType.FORCE_EXIT, ExitType.TRAILING_STOP_LOSS):
+                hold_trade = True
+                current_profit_ratio = trade.calc_profit_ratio(rate)
+                formatted_profit_ratio = f"{trade.hold_pct * 100}%"
+                formatted_current_profit_ratio = f"{current_profit_ratio * 100}%"
+                logger.warning("Checking sell %s because the current profit of %s >= %s", trade, formatted_current_profit_ratio, formatted_profit_ratio)
+                if current_profit_ratio >= trade.hold_pct:
+                    logger.warning(
+                        "Selling %s because the current profit of %s >= %s",
+                        trade, formatted_current_profit_ratio, formatted_profit_ratio
+                    )
+                    hold_trade = False
+
+        if hold_trade:
+            self._notify_exit_hold(trade, exit_reason.exit_reason, rate, current_profit_ratio)
+
+        return hold_trade
+
+    def _notify_exit_hold(self, trade: Trade, exit_reason: str, rate: float, current_profit_ratio: float = False) -> None:
+        """
+        Sends rpc notification when a exit occurred.
+        """              
+        msg = {
+            'type': RPCMessageType.EXIT_HOLD,
+            'trade_id': trade.id,
+            'exchange': trade.exchange.capitalize(),
+            'pair': trade.pair,
+            'current_profit_ratio': current_profit_ratio,
+            'rate': rate,
+            'enter_tag': trade.enter_tag,
+            'exit_reason': exit_reason
+        }
+        
+        # Send the message
+        self.rpc.send_msg(msg)

@@ -917,6 +917,18 @@ class RPC:
             stake_amount = self._freqtrade.wallets.get_trade_stake_amount(
                 pair, self._config['max_open_trades'])
 
+        # Safety check limit price above current rate
+        if price is not None and price != 0:
+            proposed_enter_rate = self._freqtrade.exchange.get_rate(pair, refresh=True, side='entry', is_short=is_short)
+            try:                
+                diff_pct = ((price - proposed_enter_rate) / proposed_enter_rate) * 100.0
+                allowed_diff_pct = self._freqtrade.config.get('limit_buy_safety_pct', 0.01) * 100
+                if diff_pct > allowed_diff_pct:
+                    diff_pct_str = f'{diff_pct:.2f}%'
+                    raise RPCException(f'Request price {price} is {diff_pct_str} higher than current market price {proposed_enter_rate}. Aborted sell.')
+            except ZeroDivisionError:
+                raise RPCException(f'Division by zero')    
+
         # execute buy
         if not order_type:
             order_type = self._freqtrade.strategy.order_types.get(
@@ -1351,3 +1363,113 @@ class RPC:
 
     def _get_market_direction(self) -> MarketDirection:
         return self._freqtrade.strategy.market_direction
+
+    def _rpc_update_hold(self, id: str, pct: float) -> Tuple[str, float]:
+        trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
+        trade = Trade.get_trades(trade_filter).first() 
+
+        if not trade:
+            logger.warning('update_hold: Invalid id argument received')
+            raise RPCException(f"Pair not found")
+        if pct <= -1:
+            logger.warning('update_hold: Invalid percentage argument received')
+            raise RPCException(f"Hold percentage needs to be greater than -100%")
+        else:
+            self._freqtrade.update_hold(id, pct)
+    
+        return [trade.id, pct]    
+ 
+    def _rpc_status_hold(self, stake_currency: str,
+                          fiat_display_currency: str) -> Tuple[List, List, float]:
+        trades: List[Trade] = Trade.get_open_trades()
+        nonspot = self._config.get('trading_mode', TradingMode.SPOT) != TradingMode.SPOT
+        if not trades:
+            raise RPCException('no active trade')
+        else:
+            trades_list = []
+            fiat_profit_sum = NAN
+            for trade in trades:
+                # calculate profit and send message to user
+                try:
+                    current_rate = self._freqtrade.exchange.get_rate(
+                        trade.pair, side='exit', is_short=trade.is_short, refresh=False)
+                except (PricingError, ExchangeError):
+                    current_rate = NAN
+                    trade_profit = NAN
+                    profit_str = f'{NAN:.2%}'
+                else:
+                    if trade.nr_of_successful_entries > 0:
+                        trade_profit = trade.calc_profit(current_rate)
+                        profit_str = f'{trade.calc_profit_ratio(current_rate):.2%}'
+                    else:
+                        trade_profit = 0.0
+                        profit_str = f'{0.0:.2f}'
+                direction_str = ('S' if trade.is_short else 'L') if nonspot else ''
+                if self._fiat_converter:
+                    fiat_profit = self._fiat_converter.convert_amount(
+                        trade_profit,
+                        stake_currency,
+                        fiat_display_currency
+                    )
+                    if not isnan(fiat_profit):
+                        profit_str += f" ({fiat_profit:.2f})"
+                        fiat_profit_sum = fiat_profit if isnan(fiat_profit_sum) \
+                            else fiat_profit_sum + fiat_profit
+                open_order = (trade.select_order_by_order_id(
+                    trade.open_order_id) if trade.open_order_id else None)
+
+                if trade.hold_pct is not None:
+                    hold_pct = 100 * trade.hold_pct
+                else:
+                    hold_pct = 0
+                hold_pct_str = f'{hold_pct:.2f}%'
+
+                detail_trade = [
+                    f'{trade.id} {direction_str}',
+                    trade.pair + ('*' if (open_order
+                                  and open_order.ft_order_side == trade.entry_side) else '')
+                    + ('**' if (open_order and
+                                open_order.ft_order_side == trade.exit_side is not None) else ''),
+                    shorten_date(dt_humanize(trade.open_date, only_distance=True)),
+                    profit_str,
+                    hold_pct_str
+                ]
+                if self._config.get('position_adjustment_enable', False):
+                    max_entry_str = ''
+                    if self._config.get('max_entry_position_adjustment', -1) > 0:
+                        max_entry_str = f"/{self._config['max_entry_position_adjustment'] + 1}"
+                    filled_entries = trade.nr_of_successful_entries
+                    detail_trade.append(f"{filled_entries}{max_entry_str}")
+                
+                
+                
+                trades_list.append(detail_trade)
+            profitcol = "Profit"
+            if self._fiat_converter:
+                profitcol += " (" + fiat_display_currency + ")"
+
+            columns = [
+                'ID L/S' if nonspot else 'ID',
+                'Pair',
+                'Since',
+                profitcol,
+                'Hold']
+            if self._config.get('position_adjustment_enable', False):
+                columns.append('# Entries')
+            return trades_list, columns, fiat_profit_sum
+        
+    def _rpc_add_lock(self, pair: Optional[str] = None, minutes: Optional[float] = None, reason: Optional[str] = None) -> Dict[str, Any]:
+        """ Adds a lock """
+
+        if not minutes:
+            minutes = 30
+
+        if not reason:
+            reason = 'AddLock'
+
+        until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+
+        if pair:
+            PairLocks.lock_pair(pair, until, reason)
+
+        return self._rpc_locks()        
