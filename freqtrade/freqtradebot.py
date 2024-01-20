@@ -1101,7 +1101,7 @@ class FreqtradeBot(LoggingMixin):
                     logger.warning(
                         f'Unable to handle stoploss on exchange for {trade.pair}: {exception}')
                 # Check if we can sell our current pair
-                if not trade.has_open_orders and trade.is_open and self.allow_exit_trade(trade) and self.handle_trade(trade):
+                if not trade.has_open_orders and trade.is_open and self.handle_trade(trade):
                     trades_closed += 1
 
             except DependencyException as exception:
@@ -2206,21 +2206,7 @@ class FreqtradeBot(LoggingMixin):
 
         # Send the message
         self.rpc.send_msg(msg)
-
-    def allow_exit_trade(self, trade: Trade) -> bool:
-        
-        if not trade.is_open or trade.nr_of_successful_entries == 0:
-            return False
-
-        if trade.open_order_id is None:
-            return True        
-
-        # Block if exit order pending, allow if only entries
-        open_exit_count = len([order for order in trade.orders if order.status == 'open' and order.side == trade.exit_side])
-        if open_exit_count:
-            return False
-
-        return True        
+           
 
     def _should_hold_trade(self, trade: Trade, exit_reason: ExitCheckTuple, rate: float) -> bool:        
         hold_trade = False
