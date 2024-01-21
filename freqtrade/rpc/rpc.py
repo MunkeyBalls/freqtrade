@@ -1416,11 +1416,7 @@ class RPC:
                         fiat_profit_sum = fiat_profit if isnan(fiat_profit_sum) \
                             else fiat_profit_sum + fiat_profit
 
-				if trade.hold_pct is not None:
-                    hold_pct = 100 * trade.hold_pct
-                else:
-                    hold_pct = 0
-                hold_pct_str = f'{hold_pct:.2f}%'
+
                 
                 
                 active_attempt_side_symbols = [
@@ -1430,6 +1426,12 @@ class RPC:
 
                 # exemple: '*.**.**' trying to enter, exit and exit with 3 different orders
                 active_attempt_side_symbols_str = '.'.join(active_attempt_side_symbols)
+
+                if trade.hold_pct is not None:
+                    hold_pct = 100 * trade.hold_pct
+                else:
+                    hold_pct = 0
+                hold_pct_str = f'{hold_pct:.2f}%'
 
                 detail_trade = [
                     f'{trade.id} {direction_str}',
