@@ -1398,8 +1398,9 @@ class RPC:
                     profit_str = f'{NAN:.2%}'
                 else:
                     if trade.nr_of_successful_entries > 0:
-                        trade_profit = trade.calc_profit(current_rate)
-                        profit_str = f'{trade.calc_profit_ratio(current_rate):.2%}'
+                        profit = trade.calculate_profit(current_rate)
+                        trade_profit = profit.profit_abs
+                        profit_str = f'{profit.profit_ratio:.2%}'
                     else:
                         trade_profit = 0.0
                         profit_str = f'{0.0:.2f}'
@@ -1414,34 +1415,36 @@ class RPC:
                         profit_str += f" ({fiat_profit:.2f})"
                         fiat_profit_sum = fiat_profit if isnan(fiat_profit_sum) \
                             else fiat_profit_sum + fiat_profit
-                open_order = (trade.select_order_by_order_id(
-                    trade.open_order_id) if trade.open_order_id else None)
 
-                if trade.hold_pct is not None:
+				if trade.hold_pct is not None:
                     hold_pct = 100 * trade.hold_pct
                 else:
                     hold_pct = 0
                 hold_pct_str = f'{hold_pct:.2f}%'
+                
+                
+                active_attempt_side_symbols = [
+                    '*' if (oo and oo.ft_order_side == trade.entry_side) else '**'
+                    for oo in trade.open_orders
+                ]
+
+                # exemple: '*.**.**' trying to enter, exit and exit with 3 different orders
+                active_attempt_side_symbols_str = '.'.join(active_attempt_side_symbols)
 
                 detail_trade = [
                     f'{trade.id} {direction_str}',
-                    trade.pair + ('*' if (open_order
-                                  and open_order.ft_order_side == trade.entry_side) else '')
-                    + ('**' if (open_order and
-                                open_order.ft_order_side == trade.exit_side is not None) else ''),
+                    trade.pair + active_attempt_side_symbols_str,
                     shorten_date(dt_humanize(trade.open_date, only_distance=True)),
                     profit_str,
                     hold_pct_str
                 ]
+
                 if self._config.get('position_adjustment_enable', False):
                     max_entry_str = ''
                     if self._config.get('max_entry_position_adjustment', -1) > 0:
                         max_entry_str = f"/{self._config['max_entry_position_adjustment'] + 1}"
                     filled_entries = trade.nr_of_successful_entries
                     detail_trade.append(f"{filled_entries}{max_entry_str}")
-                
-                
-                
                 trades_list.append(detail_trade)
             profitcol = "Profit"
             if self._fiat_converter:
