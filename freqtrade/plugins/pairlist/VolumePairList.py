@@ -62,16 +62,16 @@ class VolumePairList(IPairList):
 
         # get timeframe in minutes and seconds
         self._tf_in_min = timeframe_to_minutes(self._lookback_timeframe)
-        self._tf_in_sec = self._tf_in_min * 60
+        _tf_in_sec = self._tf_in_min * 60
 
         # wether to use range lookback or not
         self._use_range = (self._tf_in_min > 0) & (self._lookback_period > 0)
 
-        if self._use_range & (self._refresh_period < self._tf_in_sec):
+        if self._use_range & (self._refresh_period < _tf_in_sec):
             raise OperationalException(
                 f'Refresh period of {self._refresh_period} seconds is smaller than one '
                 f'timeframe of {self._lookback_timeframe}. Please adjust refresh_period '
-                f'to at least {self._tf_in_sec} and restart the bot.'
+                f'to at least {_tf_in_sec} and restart the bot.'
             )
 
         if (not self._use_range and not (
@@ -229,12 +229,8 @@ class VolumePairList(IPairList):
                 if p not in self._pair_cache
             ]
 
-            # Get all candles
-            candles = {}
-            if needed_pairs:
-                candles = self._exchange.refresh_latest_ohlcv(
-                    needed_pairs, since_ms=since_ms, cache=False
-                )
+            candles = self._exchange.refresh_ohlcv_with_cache(needed_pairs, since_ms)
+
             for i, p in enumerate(filtered_tickers):
                 contract_size = self._exchange.markets[p['symbol']].get('contractSize', 1.0) or 1.0
                 pair_candles = candles[

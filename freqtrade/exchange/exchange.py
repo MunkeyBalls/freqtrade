@@ -23,7 +23,7 @@ from freqtrade.constants import (DEFAULT_AMOUNT_RESERVE_PERCENT, NON_OPEN_EXCHAN
                                  BuySell, Config, EntryExit, ExchangeConfig,
                                  ListPairsWithTimeframes, MakerTaker, OBLiteral, PairWithTimeframe)
 from freqtrade.data.converter import clean_ohlcv_dataframe, ohlcv_to_dataframe, trades_dict_to_list
-from freqtrade.enums import OPTIMIZE_MODES, CandleType, MarginMode, PriceType, TradingMode
+from freqtrade.enums import OPTIMIZE_MODES, CandleType, MarginMode, PriceType, RunMode, TradingMode
 from freqtrade.exceptions import (DDosProtection, ExchangeError, InsufficientFundsError,
                                   InvalidOrderException, OperationalException, PricingError,
                                   RetryableOrderError, TemporaryError)
@@ -43,6 +43,7 @@ from freqtrade.misc import (chunks, deep_merge_dicts, file_dump_json, file_load_
 from freqtrade.plugins.pairlist.pairlist_helpers import expand_pairlist
 from freqtrade.util import dt_from_ts, dt_now
 from freqtrade.util.datetime_helpers import dt_humanize, dt_ts
+from freqtrade.util.periodic_cache import PeriodicCache
 
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,7 @@ class Exchange:
 
         # Holds candles
         self._klines: Dict[PairWithTimeframe, DataFrame] = {}
+        self._expiring_candle_cache: Dict[Tuple[str, int], PeriodicCache] = {}
 
         # Holds all open sell orders for dry_run
         self._dry_run_open_orders: Dict[str, Any] = {}
@@ -595,7 +597,11 @@ class Exchange:
             raise OperationalException(
                 f"Invalid timeframe '{timeframe}'. This exchange supports: {self.timeframes}")
 
-        if timeframe and timeframe_to_minutes(timeframe) < 1:
+        if (
+            timeframe
+            and self._config['runmode'] != RunMode.UTIL_EXCHANGE
+            and timeframe_to_minutes(timeframe) < 1
+        ):
             raise OperationalException("Timeframes < 1m are currently not supported by Freqtrade.")
 
     def validate_ordertypes(self, order_types: Dict) -> None:
@@ -1238,7 +1244,7 @@ class Exchange:
                 f'Insufficient funds to create {ordertype} {side} order on market {pair}. '
                 f'Tried to {side} amount {amount} at rate {limit_rate} with '
                 f'stop-price {stop_price_norm}. Message: {e}') from e
-        except (ccxt.InvalidOrder, ccxt.BadRequest) as e:
+        except (ccxt.InvalidOrder, ccxt.BadRequest, ccxt.OperationRejected) as e:
             # Errors:
             # `Order would trigger immediately.`
             raise InvalidOrderException(
@@ -1254,11 +1260,43 @@ class Exchange:
         except ccxt.BaseError as e:
             raise OperationalException(e) from e
 
+    def fetch_order_emulated(self, order_id: str, pair: str, params: Dict) -> Dict:
+        """
+        Emulated fetch_order if the exchange doesn't support fetch_order, but requires separate
+        calls for open and closed orders.
+        """
+        try:
+            order = self._api.fetch_open_order(order_id, pair, params=params)
+            self._log_exchange_response('fetch_open_order', order)
+            order = self._order_contracts_to_amount(order)
+            return order
+        except ccxt.OrderNotFound:
+            try:
+                order = self._api.fetch_closed_order(order_id, pair, params=params)
+                self._log_exchange_response('fetch_closed_order', order)
+                order = self._order_contracts_to_amount(order)
+                return order
+            except ccxt.OrderNotFound as e:
+                raise RetryableOrderError(
+                    f'Order not found (pair: {pair} id: {order_id}). Message: {e}') from e
+        except ccxt.InvalidOrder as e:
+            raise InvalidOrderException(
+                f'Tried to get an invalid order (pair: {pair} id: {order_id}). Message: {e}') from e
+        except ccxt.DDoSProtection as e:
+            raise DDosProtection(e) from e
+        except (ccxt.NetworkError, ccxt.ExchangeError) as e:
+            raise TemporaryError(
+                f'Could not get order due to {e.__class__.__name__}. Message: {e}') from e
+        except ccxt.BaseError as e:
+            raise OperationalException(e) from e
+
     @retrier(retries=API_FETCH_ORDER_RETRY_COUNT)
     def fetch_order(self, order_id: str, pair: str, params: Dict = {}) -> Dict:
         if self._config['dry_run']:
             return self.fetch_dry_run_order(order_id)
         try:
+            if not self.exchange_has('fetchOrder'):
+                return self.fetch_order_emulated(order_id, pair, params)
             order = self._api.fetch_order(order_id, pair, params=params)
             self._log_exchange_response('fetch_order', order)
             order = self._order_contracts_to_amount(order)
@@ -2120,6 +2158,39 @@ class Exchange:
 
         return results_df
 
+    def refresh_ohlcv_with_cache(
+        self,
+        pairs: List[PairWithTimeframe],
+        since_ms: int
+    ) -> Dict[PairWithTimeframe, DataFrame]:
+        """
+        Refresh ohlcv data for all pairs in needed_pairs if necessary.
+        Caches data with expiring per timeframe.
+        Should only be used for pairlists which need "on time" expirarion, and no longer cache.
+        """
+
+        timeframes = {p[1] for p in pairs}
+        for timeframe in timeframes:
+            if (timeframe, since_ms) not in self._expiring_candle_cache:
+                timeframe_in_sec = timeframe_to_seconds(timeframe)
+                # Initialise cache
+                self._expiring_candle_cache[(timeframe, since_ms)] = PeriodicCache(
+                    ttl=timeframe_in_sec, maxsize=1000)
+
+        # Get candles from cache
+        candles = {
+            c: self._expiring_candle_cache[(c[1], since_ms)].get(c, None) for c in pairs
+            if c in self._expiring_candle_cache[(c[1], since_ms)]
+        }
+        pairs_to_download = [p for p in pairs if p not in candles]
+        if pairs_to_download:
+            candles = self.refresh_latest_ohlcv(
+                pairs_to_download, since_ms=since_ms, cache=False
+            )
+            for c, val in candles.items():
+                self._expiring_candle_cache[(c[1], since_ms)][c] = val
+        return candles
+
     def _now_is_time_to_refresh(self, pair: str, timeframe: str, candle_type: CandleType) -> bool:
         # Timeframe in seconds
         interval_in_sec = timeframe_to_seconds(timeframe)
@@ -2216,13 +2287,13 @@ class Exchange:
     @retrier_async
     async def _async_fetch_trades(self, pair: str,
                                   since: Optional[int] = None,
-                                  params: Optional[dict] = None) -> List[List]:
+                                  params: Optional[dict] = None) -> Tuple[List[List], Any]:
         """
         Asyncronously gets trade history using fetch_trades.
         Handles exchange errors, does one call to the exchange.
         :param pair: Pair to fetch trade data for
         :param since: Since as integer timestamp in milliseconds
-        returns: List of dicts containing trades
+        returns: List of dicts containing trades, the next iteration value (new "since" or trade_id)
         """
         try:
             # fetch trades asynchronously
@@ -2237,7 +2308,8 @@ class Exchange:
                 )
                 trades = await self._api_async.fetch_trades(pair, since=since, limit=1000)
             trades = self._trades_contracts_to_amount(trades)
-            return trades_dict_to_list(trades)
+            pagination_value = self._get_trade_pagination_next_value(trades)
+            return trades_dict_to_list(trades), pagination_value
         except ccxt.NotSupported as e:
             raise OperationalException(
                 f'Exchange {self._api.name} does not support fetching historical trade data.'
@@ -2249,6 +2321,25 @@ class Exchange:
                                  f'Message: {e}') from e
         except ccxt.BaseError as e:
             raise OperationalException(f'Could not fetch trade data. Msg: {e}') from e
+
+    def _valid_trade_pagination_id(self, pair: str, from_id: str) -> bool:
+        """
+        Verify trade-pagination id is valid.
+        Workaround for odd Kraken issue where ID is sometimes wrong.
+        """
+        return True
+
+    def _get_trade_pagination_next_value(self, trades: List[Dict]):
+        """
+        Extract pagination id for the next "from_id" value
+        Applies only to fetch_trade_history by id.
+        """
+        if not trades:
+            return None
+        if self._trades_pagination == 'id':
+            return trades[-1].get('id')
+        else:
+            return trades[-1].get('timestamp')
 
     async def _async_get_trade_history_id(self, pair: str,
                                           until: int,
@@ -2265,33 +2356,35 @@ class Exchange:
         """
 
         trades: List[List] = []
+        # DEFAULT_TRADES_COLUMNS: 0 -> timestamp
+        # DEFAULT_TRADES_COLUMNS: 1 -> id
+        has_overlap = self._ft_has.get('trades_pagination_overlap', True)
+        # Skip last trade by default since its the key for the next call
+        x = slice(None, -1) if has_overlap else slice(None)
 
-        if not from_id:
+        if not from_id or not self._valid_trade_pagination_id(pair, from_id):
             # Fetch first elements using timebased method to get an ID to paginate on
             # Depending on the Exchange, this can introduce a drift at the start of the interval
             # of up to an hour.
             # e.g. Binance returns the "last 1000" candles within a 1h time interval
             # - so we will miss the first trades.
-            t = await self._async_fetch_trades(pair, since=since)
-            # DEFAULT_TRADES_COLUMNS: 0 -> timestamp
-            # DEFAULT_TRADES_COLUMNS: 1 -> id
-            from_id = t[-1][1]
-            trades.extend(t[:-1])
+            t, from_id = await self._async_fetch_trades(pair, since=since)
+            trades.extend(t[x])
         while True:
             try:
-                t = await self._async_fetch_trades(pair,
-                                                   params={self._trades_pagination_arg: from_id})
+                t, from_id_next = await self._async_fetch_trades(
+                    pair, params={self._trades_pagination_arg: from_id})
                 if t:
-                    # Skip last id since its the key for the next call
-                    trades.extend(t[:-1])
-                    if from_id == t[-1][1] or t[-1][0] > until:
+                    trades.extend(t[x])
+                    if from_id == from_id_next or t[-1][0] > until:
                         logger.debug(f"Stopping because from_id did not change. "
                                      f"Reached {t[-1][0]} > {until}")
                         # Reached the end of the defined-download period - add last trade as well.
-                        trades.extend(t[-1:])
+                        if has_overlap:
+                            trades.extend(t[-1:])
                         break
 
-                    from_id = t[-1][1]
+                    from_id = from_id_next
                 else:
                     logger.debug("Stopping as no more trades were returned.")
                     break
@@ -2317,19 +2410,19 @@ class Exchange:
         # DEFAULT_TRADES_COLUMNS: 1 -> id
         while True:
             try:
-                t = await self._async_fetch_trades(pair, since=since)
+                t, since_next = await self._async_fetch_trades(pair, since=since)
                 if t:
                     # No more trades to download available at the exchange,
                     # So we repeatedly get the same trade over and over again.
-                    if since == t[-1][0] and len(t) == 1:
+                    if since == since_next and len(t) == 1:
                         logger.debug("Stopping because no more trades are available.")
                         break
-                    since = t[-1][0]
+                    since = since_next
                     trades.extend(t)
                     # Reached the end of the defined-download period
-                    if until and t[-1][0] > until:
+                    if until and since_next > until:
                         logger.debug(
-                            f"Stopping because until was reached. {t[-1][0]} > {until}")
+                            f"Stopping because until was reached. {since_next} > {until}")
                         break
                 else:
                     logger.debug("Stopping as no more trades were returned.")
@@ -2659,7 +2752,7 @@ class Exchange:
             self._log_exchange_response('set_leverage', res)
         except ccxt.DDoSProtection as e:
             raise DDosProtection(e) from e
-        except (ccxt.BadRequest, ccxt.InsufficientFunds) as e:
+        except (ccxt.BadRequest, ccxt.OperationRejected, ccxt.InsufficientFunds) as e:
             if not accept_fail:
                 raise TemporaryError(
                     f'Could not set leverage due to {e.__class__.__name__}. Message: {e}') from e
@@ -2701,7 +2794,7 @@ class Exchange:
             self._log_exchange_response('set_margin_mode', res)
         except ccxt.DDoSProtection as e:
             raise DDosProtection(e) from e
-        except ccxt.BadRequest as e:
+        except (ccxt.BadRequest, ccxt.OperationRejected) as e:
             if not accept_fail:
                 raise TemporaryError(
                     f'Could not set margin mode due to {e.__class__.__name__}. Message: {e}') from e

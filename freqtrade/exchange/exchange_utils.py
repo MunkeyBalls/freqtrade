@@ -40,21 +40,34 @@ def available_exchanges(ccxt_module: Optional[CcxtModuleType] = None) -> List[st
 
 
 def validate_exchange(exchange: str) -> Tuple[bool, str]:
+    """
+    returns: can_use, reason
+        with Reason including both missing and missing_opt
+    """
     ex_mod = getattr(ccxt, exchange.lower())()
+    result = True
+    reason = ''
     if not ex_mod or not ex_mod.has:
         return False, ''
-    missing = [k for k in EXCHANGE_HAS_REQUIRED if ex_mod.has.get(k) is not True]
+    missing = [
+        k for k, v in EXCHANGE_HAS_REQUIRED.items()
+        if ex_mod.has.get(k) is not True
+        and not (all(ex_mod.has.get(x) for x in v))
+    ]
     if missing:
-        return False, f"missing: {', '.join(missing)}"
+        result = False
+        reason += f"missing: {', '.join(missing)}"
 
     missing_opt = [k for k in EXCHANGE_HAS_OPTIONAL if not ex_mod.has.get(k)]
 
     if exchange.lower() in BAD_EXCHANGES:
-        return False, BAD_EXCHANGES.get(exchange.lower(), '')
-    if missing_opt:
-        return True, f"missing opt: {', '.join(missing_opt)}"
+        result = False
+        reason = BAD_EXCHANGES.get(exchange.lower(), '')
 
-    return True, ''
+    if missing_opt:
+        reason += f"{'. ' if reason else ''}missing opt: {', '.join(missing_opt)}. "
+
+    return result, reason
 
 
 def _build_exchange_list_entry(
@@ -116,6 +129,27 @@ def timeframe_to_msecs(timeframe: str) -> int:
     Same as timeframe_to_seconds, but returns milliseconds.
     """
     return ccxt.Exchange.parse_timeframe(timeframe) * 1000
+
+
+def timeframe_to_resample_freq(timeframe: str) -> str:
+    """
+    Translates the timeframe interval value written in the human readable
+    form ('1m', '5m', '1h', '1d', '1w', etc.) to the resample frequency
+    used by pandas ('1T', '5T', '1H', '1D', '1W', etc.)
+    """
+    if timeframe == '1y':
+        return '1YS'
+    timeframe_seconds = timeframe_to_seconds(timeframe)
+    timeframe_minutes = timeframe_seconds // 60
+    resample_interval = f'{timeframe_seconds}s'
+    if 10000 < timeframe_minutes < 43200:
+        resample_interval = '1W-MON'
+    elif timeframe_minutes >= 43200 and timeframe_minutes < 525600:
+        # Monthly candles need special treatment to stick to the 1st of the month
+        resample_interval = f'{timeframe}S'
+    elif timeframe_minutes > 43200:
+        resample_interval = timeframe
+    return resample_interval
 
 
 def timeframe_to_prev_date(timeframe: str, date: Optional[datetime] = None) -> datetime:
