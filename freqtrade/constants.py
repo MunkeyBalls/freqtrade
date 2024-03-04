@@ -168,6 +168,8 @@ CONF_SCHEMA = {
         'trailing_stop_positive': {'type': 'number', 'minimum': 0, 'maximum': 1},
         'trailing_stop_positive_offset': {'type': 'number', 'minimum': 0, 'maximum': 1},
         'trailing_only_offset_is_reached': {'type': 'boolean'},
+        'forcebuy_hold_pct': {'type': 'number', 'minimum': 0, 'maximum': 0.9},
+        'limit_buy_safety_pct': {'type': 'number', 'minimum': 0, 'maximum': 0.9, 'default': 0.01},
         'use_exit_signal': {'type': 'boolean'},
         'exit_profit_only': {'type': 'boolean'},
         'exit_profit_offset': {'type': 'number'},
