@@ -339,7 +339,6 @@ class TradeSchema(BaseModel):
     precision_mode: Optional[int] = None
 
     hold_pct: Optional[float]
-    trail_pct: Optional[float]
 
 
 class OpenTradeSchema(TradeSchema):
