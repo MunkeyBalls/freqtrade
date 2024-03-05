@@ -908,9 +908,9 @@ class RPC:
             if trade.has_open_orders:
                 raise RPCException(f"position for {pair} already open - id: {trade.id} "
                                    f"and has open order {','.join(trade.open_orders_ids)}")
-        else:
-            if Trade.get_open_trade_count() >= self._config['max_open_trades']:
-                raise RPCException("Maximum number of trades is reached.")
+        #else:
+        #    if Trade.get_open_trade_count() >= self._config['max_open_trades']:
+                #raise RPCException("Maximum number of trades is reached.")
 
         if not stake_amount:
             # gen stake amount
