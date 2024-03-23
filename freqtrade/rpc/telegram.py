@@ -1208,12 +1208,12 @@ class Telegram(RPCHandler):
                 else:
                     await query.edit_message_text(text=f"Trade {trade_id} not found.")
 
-    async def _force_enter_action(self, pair, price: Optional[float], order_side: SignalDirection):
+    async def _force_enter_action(self, pair, price: Optional[float], order_side: SignalDirection, stake_amount: Optional[float]):
         if pair != 'cancel':
             try:
                 @safe_async_db
                 def _force_enter():
-                    self._rpc._rpc_force_entry(pair, price, order_side=order_side)
+                    self._rpc._rpc_force_entry(pair, price, order_side=order_side, stake_amount=stake_amount)
                 loop = asyncio.get_running_loop()
                 # Workaround to avoid nested loops
                 await loop.run_in_executor(None, _force_enter)
@@ -1261,7 +1261,8 @@ class Telegram(RPCHandler):
         if context.args:
             pair = context.args[0]
             price = float(context.args[1]) if len(context.args) > 1 else None
-            await self._force_enter_action(pair, price, order_side)
+            stake_amount = float(context.args[2]) if len(context.args) > 2 else None
+            await self._force_enter_action(pair, price, order_side, stake_amount=stake_amount)
         else:
             whitelist = self._rpc._rpc_whitelist()['whitelist']
             pair_buttons = [
