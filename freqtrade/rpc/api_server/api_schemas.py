@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, RootModel, SerializeAsAny
+from pydantic import AwareDatetime, BaseModel, RootModel, SerializeAsAny
 
 from freqtrade.constants import IntOrInf
 from freqtrade.enums import MarginMode, OrderTypeValues, SignalDirection, TradingMode
@@ -380,6 +380,13 @@ class Locks(BaseModel):
     locks: List[LockModel]
 
 
+class LocksPayload(BaseModel):
+    pair: str
+    side: str = '*'  # Default to both sides
+    until: AwareDatetime
+    reason: Optional[str] = None
+
+
 class DeleteLockRequest(BaseModel):
     pair: Optional[str] = None
     lockid: Optional[int] = None
@@ -570,3 +577,7 @@ class SysInfo(BaseModel):
 class Health(BaseModel):
     last_process: Optional[datetime] = None
     last_process_ts: Optional[int] = None
+    bot_start: Optional[datetime] = None
+    bot_start_ts: Optional[int] = None
+    bot_startup: Optional[datetime] = None
+    bot_startup_ts: Optional[int] = None

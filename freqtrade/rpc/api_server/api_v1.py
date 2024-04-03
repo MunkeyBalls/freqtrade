@@ -15,10 +15,10 @@ from freqtrade.rpc.api_server.api_schemas import (AvailablePairs, Balances, Blac
                                                   DeleteLockRequest, DeleteTrade, Entry,
                                                   ExchangeListResponse, Exit, ForceEnterPayload,
                                                   ForceEnterResponse, ForceExitPayload,
-                                                  FreqAIModelListResponse, Health, Locks, Logs,
-                                                  MixTag, OpenTradeSchema, PairHistory,
-                                                  PerformanceEntry, Ping, PlotConfig, Profit,
-                                                  ResultMsg, ShowConfig, Stats, StatusMsg,
+                                                  FreqAIModelListResponse, Health, Locks,
+                                                  LocksPayload, Logs, MixTag, OpenTradeSchema,
+                                                  PairHistory, PerformanceEntry, Ping, PlotConfig,
+                                                  Profit, ResultMsg, ShowConfig, Stats, StatusMsg,
                                                   StrategyListResponse, StrategyResponse, SysInfo,
                                                   Version, WhitelistResponse
                                                   , AddLockRequest, HoldRequest)
@@ -267,6 +267,13 @@ def hold(payload: HoldRequest, rpc: RPC = Depends(get_rpc)):
         return rpc._rpc_trade_status([payload.id])[0]
     except (RPCException, KeyError):
         raise HTTPException(status_code=404, detail='Trade not found.')
+
+@router.post('/locks', response_model=Locks, tags=['info', 'locks'])
+def add_locks(payload: List[LocksPayload], rpc: RPC = Depends(get_rpc)):
+    for lock in payload:
+        rpc._rpc_add_lock(lock.pair, lock.until, lock.reason, lock.side)
+    return rpc._rpc_locks()
+
 
 @router.get('/logs', response_model=Logs, tags=['info'])
 def logs(limit: Optional[int] = None):
