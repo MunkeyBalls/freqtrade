@@ -198,6 +198,8 @@ class Telegram(RPCHandler):
             r"/version$",
             r"/marketdir (long|short|even|none)$",
             r"/marketdir$",
+            r"/hold$", 
+            r"/add_lock$",
         ]
         # Create keys for generation
         valid_keys_print = [k.replace("$", "") for k in valid_keys]
@@ -282,7 +284,9 @@ class Telegram(RPCHandler):
             CommandHandler("version", self._version),
             CommandHandler("marketdir", self._changemarketdir),
             CommandHandler("order", self._order),
-            CommandHandler("list_custom_data", self._list_custom_data),
+            CommandHandler("list_custom_data", self._list_custom_data),                        
+            CommandHandler("add_lock", self._add_lock),
+            CommandHandler("hold", self._update_hold),
         ]
         callbacks = [
             CallbackQueryHandler(self._status_table, pattern="update_status_table"),
@@ -301,7 +305,8 @@ class Telegram(RPCHandler):
             CallbackQueryHandler(self._mix_tag_performance, pattern="update_mix_tag_performance"),
             CallbackQueryHandler(self._count, pattern="update_count"),
             CallbackQueryHandler(self._force_exit_inline, pattern=r"force_exit__\S+"),
-            CallbackQueryHandler(self._force_enter_inline, pattern=r"force_enter__\S+"),
+            CallbackQueryHandler(self._force_enter_inline, pattern=r"force_enter__\S+"),            
+            CallbackQueryHandler(self._update_hold, pattern="update_update_hold"),
         ]
         for handle in handles:
             self._app.add_handler(handle)
@@ -541,6 +546,11 @@ class Telegram(RPCHandler):
             message = f"{msg['status']}"
         elif msg["type"] == RPCMessageType.STRATEGY_MSG:
             message = f"{msg['msg']}"
+
+        elif msg['type'] == RPCMessageType.EXIT_HOLD:            
+            msg['current_profit_ratio'] = round(msg['current_profit_ratio'] * 100, 2)
+            message = '\N{WARNING SIGN} *Exit hold:* {trade_id} - `{pair}` - `{exit_reason}` at rate {rate} ({current_profit_ratio:.2f}%)'.format(**msg)
+
         else:
             logger.debug("Unknown message type: %s", msg["type"])
             return None
@@ -1311,14 +1321,13 @@ class Telegram(RPCHandler):
                 else:
                     await query.edit_message_text(text=f"Trade {trade_id} not found.")
 
-    async def _force_enter_action(self, pair, price: Optional[float], order_side: SignalDirection):
+    async def _force_enter_action(self, pair, price: Optional[float], order_side: SignalDirection, stake_amount: Optional[float]):
         if pair != "cancel":
             try:
 
                 @safe_async_db
                 def _force_enter():
-                    self._rpc._rpc_force_entry(pair, price, order_side=order_side)
-
+                    self._rpc._rpc_force_entry(pair, price, order_side=order_side, stake_amount=stake_amount)
                 loop = asyncio.get_running_loop()
                 # Workaround to avoid nested loops
                 await loop.run_in_executor(None, _force_enter)
@@ -1369,7 +1378,8 @@ class Telegram(RPCHandler):
         if context.args:
             pair = context.args[0]
             price = float(context.args[1]) if len(context.args) > 1 else None
-            await self._force_enter_action(pair, price, order_side)
+            stake_amount = float(context.args[2]) if len(context.args) > 2 else None
+            await self._force_enter_action(pair, price, order_side, stake_amount=stake_amount)
         else:
             whitelist = self._rpc._rpc_whitelist()["whitelist"]
             pair_buttons = [
@@ -1844,7 +1854,11 @@ class Telegram(RPCHandler):
             "*/stats:* `Shows Wins / losses by Sell reason as well as "
             "Avg. holding durations for buys and sells.`\n"
             "*/help:* `This help message`\n"
-            "*/version:* `Show version`\n"
+            "*/version:* `Show version`\n\n"
+            "_CustomCommands_\n"
+            "------------\n"
+            "*/add_lock <trade_id> [<minutes>]:* `Add a pair lock`\n"
+            "*/hold <id> [<percentage>]:* `Hold a pair until profit percentage is met. Also disables re-buy for now.`\n"
         )
 
         await self._send_msg(message, parse_mode=ParseMode.MARKDOWN)
@@ -2102,3 +2116,49 @@ class Telegram(RPCHandler):
                 "Invalid usage of command /marketdir. \n"
                 "Usage: */marketdir [short |  long | even | none]*"
             )
+
+    @authorized_only
+    async def _update_hold(self, update: Update, context: CallbackContext) -> None:
+        id = context.args[0] if context.args and len(context.args) > 0 else None
+
+        if context.args and len(context.args) > 1:
+            pct = float(context.args[1]) / 100
+        else:
+            pct = 0.001
+
+        try:
+            if id:
+                self._rpc._rpc_update_hold(id, pct)
+                if pct != 0:
+                    await self._send_msg(f"Set trade {id} to hold until {pct * 100}%")
+                else:
+                    await self._send_msg(f"Removed trade {id} from hold") 
+
+            # Put in it's own method            
+            fiat_currency = self._config.get('fiat_display_currency', '')
+            statlist, head, fiat_profit_sum = self._rpc._rpc_status_hold(
+                self._config['stake_currency'], fiat_currency)
+
+            max_trades_per_msg = 50
+            messages_count = max(int(len(statlist) / max_trades_per_msg + 0.99), 1)
+            for i in range(0, messages_count):
+                trades = statlist[i * max_trades_per_msg:(i + 1) * max_trades_per_msg]
+                message = tabulate(trades,
+                                headers=head,
+                                tablefmt='simple')               
+                await self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML, reload_able=True, 
+                    callback_path="update_update_hold", query=update.callback_query)
+        except RPCException as e:
+            await self._send_msg(str(e))
+
+    @authorized_only
+    def _add_lock(self, update: Update, context: CallbackContext) -> None:
+        """
+        Handler for /add_lock.
+        Adds a locked pair
+        """
+        if context.args:
+            pair = context.args[0]
+            minutes = float(context.args[1]) if len(context.args) > 1 else None
+            self._rpc._rpc_add_lock(pair=pair, minutes=minutes)
+            self._locks(update, context)
