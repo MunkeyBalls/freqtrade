@@ -44,6 +44,7 @@ class BackgroundTaskStatus(BaseModel):
     status: str
     running: bool
     progress: Optional[float] = None
+    error: Optional[str] = None
 
 
 class BackgroundTaskResult(BaseModel):
@@ -382,7 +383,7 @@ class Locks(BaseModel):
 
 class LocksPayload(BaseModel):
     pair: str
-    side: str = '*'  # Default to both sides
+    side: str = "*"  # Default to both sides
     until: AwareDatetime
     reason: Optional[str] = None
 
@@ -500,12 +501,26 @@ class AvailablePairs(BaseModel):
     pair_interval: List[List[str]]
 
 
+class PairCandlesRequest(BaseModel):
+    pair: str
+    timeframe: str
+    limit: Optional[int] = None
+    columns: Optional[List[str]] = None
+
+
+class PairHistoryRequest(PairCandlesRequest):
+    timerange: str
+    strategy: str
+    freqaimodel: Optional[str] = None
+
+
 class PairHistory(BaseModel):
     strategy: str
     pair: str
     timeframe: str
     timeframe_ms: int
     columns: List[str]
+    all_columns: List[str] = []
     data: SerializeAsAny[List[Any]]
     length: int
     buy_signals: int
@@ -557,7 +572,7 @@ class BacktestHistoryEntry(BaseModel):
     strategy: str
     run_id: str
     backtest_start_time: int
-    notes: Optional[str] = ''
+    notes: Optional[str] = ""
     backtest_start_ts: Optional[int] = None
     backtest_end_ts: Optional[int] = None
     timeframe: Optional[str] = None
@@ -566,7 +581,13 @@ class BacktestHistoryEntry(BaseModel):
 
 class BacktestMetadataUpdate(BaseModel):
     strategy: str
-    notes: str = ''
+    notes: str = ""
+
+
+class BacktestMarketChange(BaseModel):
+    columns: List[str]
+    length: int
+    data: List[List[Any]]
 
 
 class SysInfo(BaseModel):

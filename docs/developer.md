@@ -22,7 +22,7 @@ This will spin up a local server (usually on port 8000) so you can see if everyt
 ## Developer setup
 
 To configure a development environment, you can either use the provided [DevContainer](#devcontainer-setup), or use the `setup.sh` script and answer "y" when asked "Do you want to install dependencies for dev [y/N]? ".
-Alternatively (e.g. if your system is not supported by the setup.sh script), follow the manual installation process and run `pip3 install -e .[all]`.
+Alternatively (e.g. if your system is not supported by the setup.sh script), follow the manual installation process and run `pip3 install -r requirements-dev.txt` - followed by `pip3 install -e .[all]`.
 
 This will install all required tools for development, including `pytest`, `ruff`, `mypy`, and `coveralls`.
 
@@ -83,7 +83,7 @@ Details will obviously vary between setups - but this should work to get you sta
 ``` json
 {
     "name": "freqtrade trade",
-    "type": "python",
+    "type": "debugpy",
     "request": "launch",
     "module": "freqtrade",
     "console": "integratedTerminal",
@@ -261,7 +261,7 @@ For that reason, they must implement the following methods:
 
 The `until` portion should be calculated using the provided `calculate_lock_end()` method.
 
-All Protections should use `"stop_duration"` / `"stop_duration_candles"` to define how long a a pair (or all pairs) should be locked.
+All Protections should use `"stop_duration"` / `"stop_duration_candles"` to define how long a pair (or all pairs) should be locked.
 The content of this is made available as `self._stop_duration` to the each Protection.
 
 If your protection requires a look-back period, please use `"lookback_period"` / `"lockback_period_candles"` to keep all protections aligned.
@@ -305,7 +305,7 @@ The `IProtection` parent class provides a helper method for this in `calculate_l
 
 Most exchanges supported by CCXT should work out of the box.
 
-To quickly test the public endpoints of an exchange, add a configuration for your exchange to `test_ccxt_compat.py` and run these tests with `pytest --longrun tests/exchange/test_ccxt_compat.py`.
+To quickly test the public endpoints of an exchange, add a configuration for your exchange to `tests/exchange_online/conftest.py` and run these tests with `pytest --longrun tests/exchange_online/test_ccxt_compat.py`.
 Completing these tests successfully a good basis point (it's a requirement, actually), however these won't guarantee correct exchange functioning, as this only tests public endpoints, but no private endpoint (like generate order or similar).
 
 Also try to use `freqtrade download-data` for an extended timerange (multiple months) and verify that the data downloaded correctly (no holes, the specified timerange was actually downloaded).

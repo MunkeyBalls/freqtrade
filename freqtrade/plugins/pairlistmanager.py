@@ -1,6 +1,7 @@
 """
 PairList manager class
 """
+
 import logging
 from functools import partial
 from typing import Dict, List, Optional
@@ -10,10 +11,11 @@ from cachetools import TTLCache, cached
 from freqtrade.constants import Config, ListPairsWithTimeframes
 from freqtrade.data.dataprovider import DataProvider
 from freqtrade.enums import CandleType
+from freqtrade.enums.runmode import RunMode
 from freqtrade.exceptions import OperationalException
 from freqtrade.exchange.types import Tickers
 from freqtrade.mixins import LoggingMixin
-from freqtrade.plugins.pairlist.IPairList import IPairList
+from freqtrade.plugins.pairlist.IPairList import IPairList, SupportsBacktesting
 from freqtrade.plugins.pairlist.pairlist_helpers import expand_pairlist
 from freqtrade.resolvers import PairListResolver
 
@@ -22,24 +24,24 @@ logger = logging.getLogger(__name__)
 
 
 class PairListManager(LoggingMixin):
-
     def __init__(
-            self, exchange, config: Config, dataprovider: Optional[DataProvider] = None) -> None:
+        self, exchange, config: Config, dataprovider: Optional[DataProvider] = None
+    ) -> None:
         self._exchange = exchange
         self._config = config
-        self._whitelist = self._config['exchange'].get('pair_whitelist')
-        self._blacklist = self._config['exchange'].get('pair_blacklist', [])
+        self._whitelist = self._config["exchange"].get("pair_whitelist")
+        self._blacklist = self._config["exchange"].get("pair_blacklist", [])
         self._pairlist_handlers: List[IPairList] = []
         self._tickers_needed = False
         self._dataprovider: Optional[DataProvider] = dataprovider
-        for pairlist_handler_config in self._config.get('pairlists', []):
+        for pairlist_handler_config in self._config.get("pairlists", []):
             pairlist_handler = PairListResolver.load_pairlist(
-                pairlist_handler_config['method'],
+                pairlist_handler_config["method"],
                 exchange=exchange,
                 pairlistmanager=self,
                 config=config,
                 pairlistconfig=pairlist_handler_config,
-                pairlist_pos=len(self._pairlist_handlers)
+                pairlist_pos=len(self._pairlist_handlers),
             )
             self._tickers_needed |= pairlist_handler.needstickers
             self._pairlist_handlers.append(pairlist_handler)
@@ -47,7 +49,7 @@ class PairListManager(LoggingMixin):
         if not self._pairlist_handlers:
             raise OperationalException("No Pairlist Handlers defined")
 
-        if self._tickers_needed and not self._exchange.exchange_has('fetchTickers'):
+        if self._tickers_needed and not self._exchange.exchange_has("fetchTickers"):
             invalid = ". ".join([p.name for p in self._pairlist_handlers if p.needstickers])
 
             raise OperationalException(
@@ -56,8 +58,43 @@ class PairListManager(LoggingMixin):
                 f"{invalid}."
             )
 
-        refresh_period = config.get('pairlist_refresh_period', 3600)
+        self._check_backtest()
+
+        refresh_period = config.get("pairlist_refresh_period", 3600)
         LoggingMixin.__init__(self, logger, refresh_period)
+
+    def _check_backtest(self) -> None:
+        if self._config["runmode"] not in (RunMode.BACKTEST, RunMode.EDGE, RunMode.HYPEROPT):
+            return
+
+        pairlist_errors: List[str] = []
+        noaction_pairlists: List[str] = []
+        biased_pairlists: List[str] = []
+        for pairlist_handler in self._pairlist_handlers:
+            if pairlist_handler.supports_backtesting == SupportsBacktesting.NO:
+                pairlist_errors.append(pairlist_handler.name)
+            if pairlist_handler.supports_backtesting == SupportsBacktesting.NO_ACTION:
+                noaction_pairlists.append(pairlist_handler.name)
+            if pairlist_handler.supports_backtesting == SupportsBacktesting.BIASED:
+                biased_pairlists.append(pairlist_handler.name)
+
+        if noaction_pairlists:
+            logger.warning(
+                f"Pairlist Handlers {', '.join(noaction_pairlists)} do not generate "
+                "any changes during backtesting. While it's safe to leave them enabled, they will "
+                "not behave like in dry/live modes. "
+            )
+
+        if biased_pairlists:
+            logger.warning(
+                f"Pairlist Handlers {', '.join(biased_pairlists)} will introduce a lookahead bias "
+                "to your backtest results, as they use today's data - which inheritly suffers from "
+                "'winner bias'."
+            )
+        if pairlist_errors:
+            raise OperationalException(
+                f"Pairlist Handlers {', '.join(pairlist_errors)} do not support backtesting."
+            )
 
     @property
     def whitelist(self) -> List[str]:
@@ -135,8 +172,9 @@ class PairListManager(LoggingMixin):
                 pairlist.remove(pair)
         return pairlist
 
-    def verify_whitelist(self, pairlist: List[str], logmethod,
-                         keep_invalid: bool = False) -> List[str]:
+    def verify_whitelist(
+        self, pairlist: List[str], logmethod, keep_invalid: bool = False
+    ) -> List[str]:
         """
         Verify and remove items from pairlist - returning a filtered pairlist.
         Logs a warning or info depending on `aswarning`.
@@ -155,14 +193,16 @@ class PairListManager(LoggingMixin):
         return whitelist
 
     def create_pair_list(
-            self, pairs: List[str], timeframe: Optional[str] = None) -> ListPairsWithTimeframes:
+        self, pairs: List[str], timeframe: Optional[str] = None
+    ) -> ListPairsWithTimeframes:
         """
         Create list of pair tuples with (pair, timeframe)
         """
         return [
             (
                 pair,
-                timeframe or self._config['timeframe'],
-                self._config.get('candle_type_def', CandleType.SPOT)
-            ) for pair in pairs
+                timeframe or self._config["timeframe"],
+                self._config.get("candle_type_def", CandleType.SPOT),
+            )
+            for pair in pairs
         ]

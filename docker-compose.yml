@@ -1,5 +1,4 @@
 ---
-version: '3'
 services:
   freqtrade:
     image: munkey/freqtrade:develop
