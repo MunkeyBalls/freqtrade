@@ -456,6 +456,8 @@ class LocalTrade:
     # Shall not be used for calculations!
     funding_fee_running: float | None = None
 
+    hold_pct: Optional[float] = 0.0
+
     @property
     def stoploss_or_liquidation(self) -> float:
         if self.liquidation_price:
@@ -740,7 +742,8 @@ class LocalTrade:
             "precision_mode_price": self.precision_mode_price,
             "contract_size": self.contract_size,
             "has_open_orders": self.has_open_orders,
-            "orders": orders_json,
+            "orders": orders_json,            
+            "hold_pct": self.hold_pct,
         }
 
     @staticmethod
@@ -1734,6 +1737,10 @@ class Trade(ModelBase, LocalTrade):
     )
     funding_fee_running: Mapped[float | None] = mapped_column(  # type: ignore
         Float(), nullable=True, default=None
+    )
+
+    hold_pct: Mapped[float] = mapped_column(
+        Float(), nullable=True, default=0.0
     )
 
     def __init__(self, **kwargs):

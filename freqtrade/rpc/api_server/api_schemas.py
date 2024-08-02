@@ -340,6 +340,8 @@ class TradeSchema(BaseModel):
     price_precision: float | None = None
     precision_mode: int | None = None
 
+    hold_pct: Optional[float]
+
 
 class OpenTradeSchema(TradeSchema):
     stoploss_current_dist: float | None = None
@@ -390,6 +392,15 @@ class LocksPayload(BaseModel):
 class DeleteLockRequest(BaseModel):
     pair: str | None = None
     lockid: int | None = None
+
+class AddLockRequest(BaseModel):
+    pair: str
+    minutes: Optional[float]
+    reason: Optional[str]
+
+class HoldRequest(BaseModel):
+    id: str
+    pct: Optional[float]
 
 
 class Logs(BaseModel):

@@ -155,6 +155,19 @@
       "description": "Use trailing stop only when offset is reached. \nUsually specified in the strategy and missing in the configuration.",
       "type": "boolean"
     },
+    "forcebuy_hold_pct": {
+      "description": "Percentage to hold when placing force buy.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 0.9
+    },
+    "limit_buy_safety_pct": {
+      "description": "Block force entry when price difference is above certain threshold.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 0.9,
+      "default": 0.01
+    }, 
     "use_exit_signal": {
       "description": "Use exit signal for trades. \nUsually specified in the strategy and missing in the configuration.",
       "type": "boolean"

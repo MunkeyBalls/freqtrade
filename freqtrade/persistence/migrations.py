@@ -106,6 +106,8 @@ def migrate_trades_and_orders_table(
     enter_tag = get_column_def(cols, "buy_tag", get_column_def(cols, "enter_tag", "null"))
     realized_profit = get_column_def(cols, "realized_profit", "0.0")
 
+    hold_pct = get_column_def(cols, "hold_pct", "0.0")
+
     trading_mode = get_column_def(cols, "trading_mode", "null")
 
     # Leverage Properties
@@ -181,6 +183,7 @@ def migrate_trades_and_orders_table(
             interest_rate, funding_fees, funding_fee_running, realized_profit,
             amount_precision, price_precision, precision_mode, precision_mode_price, contract_size,
             max_stake_amount
+            , hold_pct
             )
         select id, lower(exchange), pair, {base_currency} base_currency,
             {stake_currency} stake_currency,
@@ -211,6 +214,7 @@ def migrate_trades_and_orders_table(
             {amount_precision} amount_precision, {price_precision} price_precision,
             {precision_mode} precision_mode, {precision_mode_price} precision_mode_price,
             {contract_size} contract_size, {max_stake_amount} max_stake_amount
+            , {hold_pct} hold_pct
             from {trade_back_name}
             """
             )
@@ -351,7 +355,7 @@ def check_migrate(engine, decl_base, previous_tables) -> None:
     # or not has_column(cols_orders, 'funding_fee')):
     migrating = False
     if not has_column(cols_trades, "precision_mode_price"):
-        # if not has_column(cols_orders, "ft_order_tag"):
+        # if not has_column(cols_orders, "ft_order_tag") or not has_column(cols_trades, "hold_pct"):
         migrating = True
         logger.info(
             f"Running database migration for trades - "

@@ -48,6 +48,8 @@ from freqtrade.rpc.api_server.api_schemas import (
     SysInfo,
     Version,
     WhitelistResponse,
+    AddLockRequest,
+    HoldRequest
 )
 from freqtrade.rpc.api_server.deps import get_config, get_exchange, get_rpc, get_rpc_optional
 from freqtrade.rpc.rpc import RPCException
