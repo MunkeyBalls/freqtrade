@@ -1567,54 +1567,57 @@ class RPC:
     
         return [trade.id, pct]    
  
-    def _rpc_status_hold(self, stake_currency: str,
-                          fiat_display_currency: str) -> Tuple[List, List, float]:
+    def _rpc_status_hold(
+        self, stake_currency: str, fiat_display_currency: str
+    ) -> Tuple[List, List, float]:
         trades: List[Trade] = Trade.get_open_trades()
-        nonspot = self._config.get('trading_mode', TradingMode.SPOT) != TradingMode.SPOT
+        nonspot = self._config.get("trading_mode", TradingMode.SPOT) != TradingMode.SPOT
         if not trades:
-            raise RPCException('no active trade')
+            raise RPCException("no active trade")
         else:
             trades_list = []
-            fiat_profit_sum = NAN
+            fiat_profit_sum = nan
             for trade in trades:
                 # calculate profit and send message to user
                 try:
                     current_rate = self._freqtrade.exchange.get_rate(
-                        trade.pair, side='exit', is_short=trade.is_short, refresh=False)
+                        trade.pair, side="exit", is_short=trade.is_short, refresh=False
+                    )
                 except (PricingError, ExchangeError):
-                    current_rate = NAN
-                    trade_profit = NAN
-                    profit_str = f'{NAN:.2%}'
+                    current_rate = nan
+                    trade_profit = nan
+                    profit_str = f"{nan:.2%}"
                 else:
                     if trade.nr_of_successful_entries > 0:
                         profit = trade.calculate_profit(current_rate)
                         trade_profit = profit.profit_abs
-                        profit_str = f'{profit.profit_ratio:.2%}'
+                        profit_str = f"{profit.profit_ratio:.2%}"
                     else:
                         trade_profit = 0.0
-                        profit_str = f'{0.0:.2f}'
-                direction_str = ('S' if trade.is_short else 'L') if nonspot else ''
+                        profit_str = f"{0.0:.2f}"
+                direction_str = ("S" if trade.is_short else "L") if nonspot else ""
                 if self._fiat_converter:
                     fiat_profit = self._fiat_converter.convert_amount(
-                        trade_profit,
-                        stake_currency,
-                        fiat_display_currency
+                        trade_profit, stake_currency, fiat_display_currency
                     )
                     if not isnan(fiat_profit):
                         profit_str += f" ({fiat_profit:.2f})"
-                        fiat_profit_sum = fiat_profit if isnan(fiat_profit_sum) \
-                            else fiat_profit_sum + fiat_profit
+                        fiat_profit_sum = (
+                            fiat_profit if isnan(fiat_profit_sum) else fiat_profit_sum + fiat_profit
+                        )
+                else:
+                    profit_str += f" ({trade_profit:.2f})"
+                    fiat_profit_sum = (
+                        trade_profit if isnan(fiat_profit_sum) else fiat_profit_sum + trade_profit
+                    )
 
-
-                
-                
                 active_attempt_side_symbols = [
-                    '*' if (oo and oo.ft_order_side == trade.entry_side) else '**'
+                    "*" if (oo and oo.ft_order_side == trade.entry_side) else "**"
                     for oo in trade.open_orders
                 ]
 
-                # exemple: '*.**.**' trying to enter, exit and exit with 3 different orders
-                active_attempt_side_symbols_str = '.'.join(active_attempt_side_symbols)
+                # example: '*.**.**' trying to enter, exit and exit with 3 different orders
+                active_attempt_side_symbols_str = ".".join(active_attempt_side_symbols)
 
                 if trade.hold_pct is not None:
                     hold_pct = 100 * trade.hold_pct
@@ -1623,16 +1626,16 @@ class RPC:
                 hold_pct_str = f'{hold_pct:.2f}%'
 
                 detail_trade = [
-                    f'{trade.id} {direction_str}',
+                    f"{trade.id} {direction_str}",
                     trade.pair + active_attempt_side_symbols_str,
-                    shorten_date(dt_humanize(trade.open_date, only_distance=True)),
+                    shorten_date(dt_humanize_delta(trade.open_date_utc)),
                     profit_str,
-                    hold_pct_str
+                    hold_pct_str,
                 ]
 
-                if self._config.get('position_adjustment_enable', False):
-                    max_entry_str = ''
-                    if self._config.get('max_entry_position_adjustment', -1) > 0:
+                if self._config.get("position_adjustment_enable", False):
+                    max_entry_str = ""
+                    if self._config.get("max_entry_position_adjustment", -1) > 0:
                         max_entry_str = f"/{self._config['max_entry_position_adjustment'] + 1}"
                     filled_entries = trade.nr_of_successful_entries
                     detail_trade.append(f"{filled_entries}{max_entry_str}")
@@ -1640,15 +1643,12 @@ class RPC:
             profitcol = "Profit"
             if self._fiat_converter:
                 profitcol += " (" + fiat_display_currency + ")"
+            else:
+                profitcol += " (" + stake_currency + ")"
 
-            columns = [
-                'ID L/S' if nonspot else 'ID',
-                'Pair',
-                'Since',
-                profitcol,
-                'Hold']
-            if self._config.get('position_adjustment_enable', False):
-                columns.append('# Entries')
+            columns = ["ID L/S" if nonspot else "ID", "Pair", "Since", profitcol, "Hold"]
+            if self._config.get("position_adjustment_enable", False):
+                columns.append("# Entries")
             return trades_list, columns, fiat_profit_sum
         
     def _rpc_add_lock(self, pair: Optional[str] = None, minutes: Optional[float] = None, reason: Optional[str] = None) -> Dict[str, Any]:
