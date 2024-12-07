@@ -1552,7 +1552,7 @@ class RPC:
     def _get_market_direction(self) -> MarketDirection:
         return self._freqtrade.strategy.market_direction
 
-    def _rpc_update_hold(self, id: str, pct: float) -> Tuple[str, float]:
+    def _rpc_update_hold(self, id: str, pct: float) -> tuple[str, float]:
         trade_filter = (Trade.is_open.is_(True) & (Trade.id == id))
         trade = Trade.get_trades(trade_filter).first() 
 
@@ -1569,8 +1569,8 @@ class RPC:
  
     def _rpc_status_hold(
         self, stake_currency: str, fiat_display_currency: str
-    ) -> Tuple[List, List, float]:
-        trades: List[Trade] = Trade.get_open_trades()
+    ) -> tuple[list, list, float]:
+        trades: list[Trade] = Trade.get_open_trades()
         nonspot = self._config.get("trading_mode", TradingMode.SPOT) != TradingMode.SPOT
         if not trades:
             raise RPCException("no active trade")
@@ -1651,7 +1651,7 @@ class RPC:
                 columns.append("# Entries")
             return trades_list, columns, fiat_profit_sum
         
-    def _rpc_add_lock(self, pair: Optional[str] = None, minutes: Optional[float] = None, reason: Optional[str] = None) -> Dict[str, Any]:
+    def _rpc_add_lock(self, pair: str | None, minutes: float | None, reason: str | None) -> dict[str, Any]:
         """ Adds a lock """
 
         if not minutes:
