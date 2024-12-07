@@ -108,6 +108,8 @@ def migrate_trades_and_orders_table(
 
     hold_pct = get_column_def(cols, "hold_pct", "0.0")
 
+    hold_pct = get_column_def(cols, "hold_pct", "0.0")
+
     trading_mode = get_column_def(cols, "trading_mode", "null")
 
     # Leverage Properties

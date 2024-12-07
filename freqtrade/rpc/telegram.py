@@ -208,6 +208,8 @@ class Telegram(RPCHandler):
             r"/marketdir$",
             r"/hold$", 
             r"/add_lock$",
+            r"/hold$", 
+            r"/add_lock$",
         ]
         # Create keys for generation
         valid_keys_print = [k.replace("$", "") for k in valid_keys]
